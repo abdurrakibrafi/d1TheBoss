@@ -19,18 +19,6 @@ CORS_ALLOW_ALL_ORIGINS = True
 # ]
 
 # Database for production (you might want to use a managed database)
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": env("POSTGRES_DB"),
-        "USER": env("POSTGRES_USER"),
-        "PASSWORD": env("POSTGRES_PASSWORD"),
-        "HOST": env("POSTGRES_HOST"),
-        "PORT": env("POSTGRES_PORT", default="5432"),
-    }
-}
-
-# Email configuration for production
 if env("DATABASE_URL", default=None):
     DATABASES = {
         "default": dj_database_url.config(
@@ -40,13 +28,26 @@ if env("DATABASE_URL", default=None):
         )
     }
 else:
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    EMAIL_HOST = env("EMAIL_HOST")
-    EMAIL_HOST_USER = env("EMAIL_HOST_USER")
-    EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
-    EMAIL_PORT = env.int("EMAIL_PORT", default=587)
-    EMAIL_USE_TLS = True
-    DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": env("POSTGRES_DB"),
+            "USER": env("POSTGRES_USER"),
+            "PASSWORD": env("POSTGRES_PASSWORD"),
+            "HOST": env("POSTGRES_HOST"),
+            "PORT": env("POSTGRES_PORT", default="5432"),
+        }
+    }
+
+# Email configuration for production
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = env("EMAIL_HOST")
+EMAIL_HOST_USER = env("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+EMAIL_USE_TLS = True
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
 
 # Redis for production
 CHANNEL_LAYERS = {
