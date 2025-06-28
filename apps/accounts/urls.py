@@ -18,7 +18,8 @@ from .views import (
     ProfileUpdateView,
     VerifyEmailChangeView,
     InitiateRegistrationView,
-    CompleteRegistrationView
+    CompleteRegistrationView,
+    SocialAuthView
 )
 
 urlpatterns = [
@@ -61,6 +62,8 @@ urlpatterns = [
         VerifyEmailChangeView.as_view(),
         name="verify-email-change",
     ),
+
+    path("social-auth/", SocialAuthView.as_view(), name="social-auth"),
 
 
 ]

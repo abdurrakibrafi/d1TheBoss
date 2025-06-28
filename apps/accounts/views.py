@@ -24,7 +24,9 @@ from .serializers import (
     ProfileUpdateSerializer,
     VerifyEmailChangeSerializer,
     InitiateRegistrationSerializer,
-    CompleteRegistrationSerializer
+    CompleteRegistrationSerializer,
+    SocialAuthSerializer
+
 )
 from django.conf import settings
 from apps.core.utils.mixins import BaseResponseMixin
@@ -390,3 +392,31 @@ class VerifyEmailChangeView(generics.GenericAPIView):
             {"detail": "Email successfully updated."}, status=status.HTTP_200_OK
         )
 
+
+class SocialAuthView(BaseResponseMixin, generics.GenericAPIView):
+    serializer_class = SocialAuthSerializer
+    permission_classes = (permissions.AllowAny,)
+    throttle_classes = [AnonRateThrottle]
+    
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        user = serializer.create_or_login_user()
+        
+        # Generate tokens
+        refresh = RefreshToken.for_user(user)
+        
+        return self.success_response(
+            data={
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+                "user": {
+                    "email": user.email,
+                    "name": user.profile.name if hasattr(user, 'profile') else '',
+                    "social_auth_provider": user.social_auth_provider,  # Include provider info
+                }
+            },
+            message="Login successful",
+            status_code=status.HTTP_200_OK
+        )

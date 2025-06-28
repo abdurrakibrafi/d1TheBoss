@@ -22,10 +22,36 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("is_superuser", True)
         return self.create_user(email, password, **extra_fields)
 
+SOCIAL_AUTH_PROVIDERS = (
+    ("google", "Google"),
+    ("apple", "Apple"),
+    ("facebook", "Facebook"),
+    ("github", "GitHub"),
+    ("twitter", "Twitter"),
+    ("linkedin", "LinkedIn"),
+    ("microsoft", "Microsoft"),
+    ("amazon", "Amazon"),
+    ("discord", "Discord"),
+    ("twitch", "Twitch"),
+    ("slack", "Slack"),
+    ("instagram", "Instagram"),
+    ("pinterest", "Pinterest"),
+    ("reddit", "Reddit"),
+    ("snapchat", "Snapchat"),
+    ("tiktok", "TikTok"),
+    ("youtube", "YouTube"),
+    ("whatsapp", "WhatsApp"),
+    ("telegram", "Telegram"),
+    ("other", "Other"),
+)
 
 class User(AbstractUser):
     email = models.EmailField(unique=True)
     username = models.CharField(max_length=150, unique=False, blank=True, null=True)
+
+    social_auth_provider = models.CharField(
+        max_length=50, choices=SOCIAL_AUTH_PROVIDERS, blank=True, null=True
+    )
 
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)

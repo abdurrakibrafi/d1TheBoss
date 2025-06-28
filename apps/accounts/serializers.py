@@ -464,5 +464,43 @@ class VerifyEmailChangeSerializer(serializers.Serializer):
         )
 
         return user
+    
+from apps.accounts.models import SOCIAL_AUTH_PROVIDERS
 
-
+class SocialAuthSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    provider = serializers.ChoiceField(choices=SOCIAL_AUTH_PROVIDERS)  # Add validation
+    name = serializers.CharField(required=False, allow_blank=True)
+    
+    def create_or_login_user(self):
+        email = self.validated_data['email']
+        provider = self.validated_data['provider']
+        name = self.validated_data.get('name', '')
+        
+        # Check if user exists
+        try:
+            user = User.objects.get(email=email)
+            # User exists, just login
+            if not user.is_active:
+                user.is_active = True
+                user.save()
+                
+            # Update provider if not set
+            if not user.social_auth_provider:
+                user.social_auth_provider = provider
+                user.save()
+                
+        except User.DoesNotExist:
+            # Create new user
+            user = User.objects.create(
+                email=email,
+                is_active=True,
+                social_auth_provider=provider,  # Set provider
+            )
+            
+        # Update profile with social data
+        if name and hasattr(user, 'profile'):
+            user.profile.name = name
+            user.profile.save()
+            
+        return user
