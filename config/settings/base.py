@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.google",
     "channels",
     "django_celery_beat",
+    "drf_spectacular",
     # Local apps
     "apps.accounts",
     "apps.core",
@@ -121,6 +122,8 @@ APPLE_CALLBACK_URL = env("APPLE_CALLBACK_URL", default="")
 
 # REST Framework settings
 REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
