@@ -66,11 +66,14 @@ class InitiateRegistrationSerializer(serializers.Serializer):
     email = serializers.EmailField()
     
     def validate_email(self, value):
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError("User with this email already exists.")
+        # Remove the validation error - we'll handle this in the view
         return value
     
     def send_registration_otp(self, email):
+        # Check if user already exists
+        if User.objects.filter(email=email).exists():
+            return None, "User with this email already exists."
+            
         otp_code = "".join(random.choices("0123456789", k=4))
         
         # Create inactive user first
@@ -93,8 +96,9 @@ class InitiateRegistrationSerializer(serializers.Serializer):
             [email],
             fail_silently=False,
         )
-        return user
-
+        
+        return user, "Verification code sent to your email."
+    
 
 class CompleteRegistrationSerializer(serializers.Serializer):
     email = serializers.EmailField()

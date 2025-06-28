@@ -41,18 +41,42 @@ class InitiateRegistrationView(BaseResponseMixin, generics.GenericAPIView):
     
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        
+        if not serializer.is_valid():
+            # Handle basic validation errors (like invalid email format)
+            return self.success_response(
+                data={
+                    "email": request.data.get("email", ""),
+                    "is_sent": False
+                },
+                message="Invalid email format.",
+                status_code=status.HTTP_200_OK
+            )
         
         email = serializer.validated_data["email"]
-        user = serializer.send_registration_otp(email)
+        user, message = serializer.send_registration_otp(email)
         
+        if user is None:
+            # User already exists
+            return self.success_response(
+                data={
+                    "email": email,
+                    "is_sent": False
+                },
+                message=message,
+                status_code=status.HTTP_200_OK
+            )
+        
+        # Success case
         return self.success_response(
-            data={"email": email, "user_id": user.id},
-            message="Verification code sent to your email. Please verify to continue registration.",
-            status_code=status.HTTP_201_CREATED
+            data={
+                "email": email,
+                "user_id": user.id,
+                "is_sent": True
+            },
+            message=message,
+            status_code=status.HTTP_200_OK
         )
-
-
 class CompleteRegistrationView(BaseResponseMixin, generics.GenericAPIView):
     serializer_class = CompleteRegistrationSerializer
     permission_classes = (permissions.AllowAny,)
