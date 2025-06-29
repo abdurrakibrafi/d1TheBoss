@@ -7,6 +7,7 @@ import random
 from .models import OTP, UserProfile
 from django.core.mail import send_mail
 from django.conf import settings
+from apps.accounts.utils.send_otp_email import send_otp_email
 
 User = get_user_model()
 
@@ -323,6 +324,53 @@ class SocialLoginSerializer(serializers.Serializer):
 class ResendOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
     purpose = serializers.ChoiceField(choices=["verification", "password_reset"])
+
+    def validate(self, attrs):
+        email = attrs["email"]
+        purpose = attrs["purpose"]
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            # For security, pretend success — don't expose info
+            attrs["user"] = None
+            return attrs
+
+        if purpose == "verification":
+            if user.is_active:
+                raise serializers.ValidationError("Email is already verified.")
+            attrs["user"] = user
+
+        elif purpose == "password_reset":
+            attrs["user"] = user
+
+        return attrs
+
+    def send_otp(self):
+        user = self.validated_data.get("user")
+        purpose = self.validated_data["purpose"]
+
+        if purpose == "verification":
+            if user:
+                # Mark old OTPs as used
+                OTP.objects.filter(user=user, purpose="verification", is_used=False).update(is_used=True)
+
+                otp_code = "".join(random.choices("0123456789", k=4))
+
+                OTP.objects.create(
+                    user=user,
+                    otp=otp_code,
+                    purpose="verification",
+                    expires_at=timezone.now() + timedelta(minutes=10),
+                )
+
+                send_otp_email(user, otp_code, purpose)
+
+        elif purpose == "password_reset":
+            reset_serializer = PasswordResetRequestSerializer()
+            reset_serializer.send_reset_otp(user.email)  # assuming method takes email
+
+        return True
 
 
 class AccountSoftDeleteSerializer(serializers.Serializer):

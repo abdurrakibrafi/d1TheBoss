@@ -152,35 +152,14 @@ class ResendOTPView(BaseResponseMixin, generics.GenericAPIView):
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
-        email = serializer.validated_data["email"]
-        purpose = serializer.validated_data["purpose"]
-        
-        try:
-            user = User.objects.get(email=email)
-            
-            if purpose == "verification":
-                if user.is_active:
-                    return self.error_response(
-                        message="Email is already verified",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
-                # Resend OTP for incomplete registration
-                initiate_serializer = InitiateRegistrationSerializer()
-                initiate_serializer.send_registration_otp(email)
-                
-            elif purpose == "password_reset":
-                reset_serializer = PasswordResetRequestSerializer()
-                reset_serializer.send_reset_otp(email)
-            
-            return self.success_response(
-                message="OTP has been sent to your email"
-            )
-            
-        except User.DoesNotExist:
-            return self.success_response(
-                message="If the email exists, an OTP has been sent"
-            )
+
+        serializer.send_otp()
+
+        return self.success_response(
+            message="OTP has been sent to your email"
+        )
+
+  
 
 class LoginView(BaseResponseMixin, generics.GenericAPIView):
     permission_classes = (permissions.AllowAny,)
