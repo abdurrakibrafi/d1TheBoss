@@ -4,8 +4,13 @@ from rest_framework import status, permissions
 from apps.core.utils.mixins import BaseResponseMixin
 from apps.core.utils.fake_user_data import FakeDataGenerator
 from django.shortcuts import render
+from django.views.generic import TemplateView
 
 # Create your views here.
+
+
+class APIGuideView(TemplateView):
+    template_name = "guide/api-guide.html"
 
 class FakeDataAPIView(BaseResponseMixin, APIView):
     """
