@@ -94,7 +94,6 @@ class InitiateRegistrationSerializer(serializers.Serializer):
         
         return user, "Verification code sent to your email."
     
-
 class CompleteRegistrationSerializer(serializers.Serializer):
     email = serializers.EmailField()
     otp = serializers.CharField(max_length=4, min_length=4)
@@ -111,20 +110,33 @@ class CompleteRegistrationSerializer(serializers.Serializer):
         otp_code = attrs.get("otp")
         
         try:
-            user = User.objects.get(email=email, is_active=False)
+            user = User.objects.get(email=email)
+            
+            # SMART CHECK: Look for unused password_setup OTP instead
+            password_setup_otp_exists = OTP.objects.filter(
+                user=user, 
+                purpose="password_setup", 
+                is_used=False
+            ).exists()
+            
+            if not password_setup_otp_exists:
+                raise serializers.ValidationError(
+                    {"email": "No valid password setup session found. Please verify your email first."}
+                )
+                
         except User.DoesNotExist:
             raise serializers.ValidationError(
-                {"email": "User with this email does not exist or is already verified."}
+                {"email": "User with this email does not exist."}
             )
         
         try:
             otp = OTP.objects.filter(
-                user=user, purpose="verification", otp=otp_code, is_used=False
+                user=user, purpose="password_setup", otp=otp_code, is_used=False
             ).latest("created_at")
             
             if not otp.is_valid():
                 raise serializers.ValidationError({"otp": "OTP has expired."})
-            
+                
             attrs["user"] = user
             attrs["otp_object"] = otp
             return attrs
@@ -141,46 +153,55 @@ class CompleteRegistrationSerializer(serializers.Serializer):
         otp.is_used = True
         otp.save()
         
-        # Set password and activate user
+        # Set password
         user.set_password(password)
-        user.is_active = True
         user.save()
         
         return user
-
-
+    
+    
 class VerifyEmailSerializer(serializers.Serializer):
     email = serializers.EmailField()
     otp = serializers.CharField(max_length=4, min_length=4)
-
+    
     def validate(self, attrs):
         email = attrs.get("email")
         otp_code = attrs.get("otp")
-
+        
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
             raise serializers.ValidationError(
                 {"email": "User with this email does not exist."}
             )
-
+        
         try:
             otp = OTP.objects.filter(
                 user=user, purpose="verification", otp=otp_code, is_used=False
             ).latest("created_at")
-
+            
             if not otp.is_valid():
                 raise serializers.ValidationError({"otp": "OTP has expired."})
-
+            
+            # Mark verification OTP as used
             otp.is_used = True
             otp.save()
-
+            
+            # Activate user
             user.is_active = True
             user.save()
-
+            
+            # Create password_setup OTP
+            OTP.objects.create(
+                user=user,
+                purpose="password_setup",
+                otp=otp_code,  # Reuse same OTP code
+                expires_at=otp.expires_at  # Same expiry
+            )
+            
             attrs["user"] = user
             return attrs
-
+            
         except OTP.DoesNotExist:
             raise serializers.ValidationError({"otp": "Invalid OTP."})
 

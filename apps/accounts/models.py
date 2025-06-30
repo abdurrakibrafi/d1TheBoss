@@ -92,6 +92,7 @@ class OTP(models.Model):
     PURPOSE_STATUS = [
         ("verification", "Email Verification"),
         ("password_reset", "Password Reset"),
+        ("password_setup", "Password Setup"),
         ("email_change", "Email Change"),
         ("other", "Other"),
     ]
