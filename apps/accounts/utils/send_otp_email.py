@@ -8,7 +8,7 @@ def send_otp_email(user, otp_code, purpose):
         "Verification Code" if purpose == "verification" else "Password Reset Code"
     )
 
-    context = {"user": user, "otp": otp_code, "purpose": purpose, "valid_minut holdy shit es": 10}
+    context = {"user": user, "otp": otp_code, "purpose": purpose, "valid_minutes": 10}
 
     text_content = render_to_string("accounts/otp_email.txt", context)
     html_content = render_to_string("accounts/otp_email.html", context)

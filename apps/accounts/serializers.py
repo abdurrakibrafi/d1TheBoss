@@ -89,14 +89,8 @@ class InitiateRegistrationSerializer(serializers.Serializer):
             purpose="verification",
             expires_at=timezone.now() + timedelta(minutes=10),
         )
-        
-        send_mail(
-            "Verify Your Email",
-            f"Your verification code is: {otp_code}. Valid for 10 minutes.",
-            settings.DEFAULT_FROM_EMAIL,
-            [email],
-            fail_silently=False,
-        )
+
+        send_otp_email(user, otp_code, "Verification")  
         
         return user, "Verification code sent to your email."
     
