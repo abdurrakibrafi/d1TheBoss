@@ -64,7 +64,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class InitiateRegistrationSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    email = serializers.EmailField(required=True)
     
     def validate_email(self, value):
         # Remove the validation error - we'll handle this in the view

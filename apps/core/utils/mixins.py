@@ -21,10 +21,6 @@ logger = logging.getLogger(__name__)
 
 
 class BaseResponseMixin:
-    """
-    Mixin to provide consistent API response format across all views.
-    Handles success responses, error responses, and exception handling.
-    """
     
     def success_response(self, data=None, message="Success", status_code=status.HTTP_200_OK, **kwargs):
         """
