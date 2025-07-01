@@ -12,7 +12,9 @@ from apps.accounts.utils.send_otp_email import send_otp_email
 User = get_user_model()
 
 
-
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(required=True, style={'input_type': 'password'})
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(

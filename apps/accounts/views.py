@@ -25,7 +25,8 @@ from .serializers import (
     VerifyEmailChangeSerializer,
     InitiateRegistrationSerializer,
     CompleteRegistrationSerializer,
-    SocialAuthSerializer
+    SocialAuthSerializer,
+    LoginSerializer
 
 )
 from django.conf import settings
@@ -162,18 +163,16 @@ class ResendOTPView(BaseResponseMixin, generics.GenericAPIView):
   
 
 class LoginView(BaseResponseMixin, generics.GenericAPIView):
+    serializer_class = LoginSerializer
     permission_classes = (permissions.AllowAny,)
     throttle_classes = [AnonRateThrottle]
 
     def post(self, request):
-        email = request.data.get("email")
-        password = request.data.get("password")
-
-        if not email or not password:
-            return self.error_response(
-                message="Email and password are required",
-                status_code=status.HTTP_400_BAD_REQUEST
-            )
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        email = serializer.validated_data.get("email")
+        password = serializer.validated_data.get("password")
 
         user = authenticate(username=email, password=password)
 
@@ -200,7 +199,7 @@ class LoginView(BaseResponseMixin, generics.GenericAPIView):
                 message="Invalid email or password",
                 status_code=status.HTTP_401_UNAUTHORIZED
             )
-
+        
 class LogoutView(BaseResponseMixin, generics.GenericAPIView):
     permission_classes = (permissions.IsAuthenticated,)
     throttle_classes = [UserRateThrottle]
