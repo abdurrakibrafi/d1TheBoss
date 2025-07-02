@@ -140,12 +140,11 @@ class UserProfile(models.Model):
         upload_to="accounts/profile_pictures/", blank=True, null=True
     )
 
-    # Additional fields
-    motivational_quote = models.CharField(max_length=255, blank=True)
-
-    stripe_customer_id = models.CharField(max_length=255, blank=True, null=True)
-
     profile_completed = models.BooleanField(default=False)
+    
+    onboarding_step = models.IntegerField(default=0)  # 0-7 for your pages
+    onboarding_completed = models.BooleanField(default=False)
+    onboarding_completed_at = models.DateTimeField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

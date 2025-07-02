@@ -1,187 +1,326 @@
-from django.db import models
-from django.contrib.auth import get_user_model
+# apps/core/views.py
 
-User = get_user_model()
+from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import get_object_or_404
+from apps.core.mixins import BaseResponseMixin  # Import your mixin
 
+# =============================================
+# MASTER DATA VIEWS (GET only)
+# =============================================
 
-class Denomination(models.Model):
-    name = models.CharField(max_length=100)
-    description = models.TextField(blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        ordering = ['name']
-
-        from django.db import models
-
-class Denomination(models.Model):
-    name = models.CharField(max_length=100)
-    parent = models.ForeignKey(
-        'self',
-        null=True,
-        blank=True,
-        related_name='subdenominations',
-        on_delete=models.CASCADE
-    )
-
-    class Meta:
-        verbose_name = 'Denomination'
-        verbose_name_plural = 'Denominations'
-
-    def __str__(self):
-        return self.name
-
-
-
-class FaithGoal(models.Model):
-    name = models.CharField(max_length=200)
-    description = models.TextField(blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        ordering = ['name']
-
-
-class JourneyReason(models.Model):
-    name = models.CharField(max_length=200)
-    description = models.TextField(blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        ordering = ['name']
-
-
-class TonePreference(models.Model):
-    name = models.CharField(max_length=100)
-    description = models.TextField(blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        ordering = ['name']
-
-
-class BibleFamiliarity(models.Model):
-    level = models.CharField(max_length=50)  # None, A Little, A Lot
-    description = models.TextField(blank=True, null=True)
-    order = models.PositiveIntegerField(default=0)  # For ordering None=0, A Little=1, A Lot=2
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return self.level
-
-    class Meta:
-        ordering = ['order']
-        verbose_name_plural = "Bible Familiarities"
-
-
-class BibleVersion(models.Model):
-    name = models.CharField(max_length=200)  # Full name
-    abbreviation = models.CharField(max_length=20)  # RSVCE, NIV, CSB
-    copyright_info = models.TextField(blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.name} ({self.abbreviation})"
-
-    class Meta:
-        ordering = ['name']
-
-
-class UserProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+class OnboardingOptionsView(BaseResponseMixin, generics.GenericAPIView):
+    """Get all onboarding options in one call"""
+    permission_classes = [IsAuthenticated]
     
-    # Onboarding choices
-    denomination = models.ForeignKey(Denomination, on_delete=models.SET_NULL, null=True, blank=True)
-    faith_goal = models.ForeignKey(FaithGoal, on_delete=models.SET_NULL, null=True, blank=True)
-    journey_reason = models.ForeignKey(JourneyReason, on_delete=models.SET_NULL, null=True, blank=True)
-    tone_preference = models.ForeignKey(TonePreference, on_delete=models.SET_NULL, null=True, blank=True)
-    bible_familiarity = models.ForeignKey(BibleFamiliarity, on_delete=models.SET_NULL, null=True, blank=True)
-    bible_version = models.ForeignKey(BibleVersion, on_delete=models.SET_NULL, null=True, blank=True)
+    def get(self, request):
+        try:
+            data = {
+                'journey_reasons': JourneyReasonOption.objects.filter(is_active=True),
+                'denominations': DenominationOption.objects.filter(is_active=True),  # Remove is_parent=True
+                'faith_goal_questions': FaithGoalQuestion.objects.filter(is_active=True),
+                'tone_preferences': TonePreferenceOption.objects.filter(is_active=True),
+                'bible_familiarity': BibleFamiliarityOption.objects.filter(is_active=True),
+                'bible_versions': BibleVersionOption.objects.filter(is_active=True),
+            }
+            serializer = OnboardingOptionsSerializer(data)
+            return self.success_response(
+                data=serializer.data,
+                message="Onboarding options retrieved successfully"
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
+
+# =============================================
+# USER SELECTION VIEWS (GET/POST)
+# =============================================
+
+class JourneyReasonView(BaseResponseMixin, generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = JourneyReasonSerializer
     
-    # Onboarding status
-    onboarding_completed = models.BooleanField(default=False)
-    completed_at = models.DateTimeField(null=True, blank=True)
+    def get(self, request):
+        try:
+            journey = JourneyReason.objects.filter(user=request.user).first()
+            if journey:
+                serializer = self.serializer_class(journey)
+                return self.success_response(
+                    data=serializer.data,
+                    message="Journey reason retrieved successfully"
+                )
+            return self.success_response(
+                data=None,
+                message="No journey reason found for user"
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
     
-    # Timestamps
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    def post(self, request):
+        try:
+            # Delete existing first (one choice only)
+            JourneyReason.objects.filter(user=request.user).delete()
+            
+            serializer = self.serializer_class(data=request.data, context={'request': request})
+            if serializer.is_valid():
+                serializer.save()
+                return self.created_response(
+                    data=serializer.data,
+                    message="Journey reason saved successfully"
+                )
+            return self.bad_request_response(
+                message="Invalid data provided",
+                errors=serializer.errors
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
 
-    def __str__(self):
-        return f"{self.user.email} - Profile"
-
-    @property
-    def onboarding_progress_percentage(self):
-        """Calculate onboarding completion percentage"""
-        total_fields = 6
-        completed_fields = sum([
-            1 if self.denomination else 0,
-            1 if self.faith_goal else 0,
-            1 if self.journey_reason else 0,
-            1 if self.tone_preference else 0,
-            1 if self.bible_familiarity else 0,
-            1 if self.bible_version else 0,
-        ])
-        return int((completed_fields / total_fields) * 100)
-
-    @property
-    def current_onboarding_step(self):
-        """Get current onboarding step (1-7)"""
-        if not self.denomination:
-            return 1
-        elif not self.faith_goal:
-            return 2
-        elif not self.journey_reason:
-            return 3
-        elif not self.tone_preference:
-            return 4
-        elif not self.bible_familiarity:
-            return 5
-        elif not self.bible_version:
-            return 6
-        else:
-            return 7  # Completed
-
-    def is_onboarding_complete(self):
-        """Check if all onboarding fields are filled"""
-        return all([
-            self.denomination,
-            self.faith_goal,
-            self.journey_reason, 
-            self.tone_preference,
-            self.bible_familiarity,
-            self.bible_version
-        ])
-
-    class Meta:
-        ordering = ['-created_at']
-
-
-class OnboardingProgress(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='onboarding_progress')
-    current_step = models.PositiveIntegerField(default=1)
-    started_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+class DenominationView(BaseResponseMixin, generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = DenominationSerializer
     
-    def __str__(self):
-        return f"{self.user.email} - Step {self.current_step}"
+    def get(self, request):
+        try:
+            denomination = Denomination.objects.filter(user=request.user).first()
+            if denomination:
+                serializer = self.serializer_class(denomination)
+                return self.success_response(
+                    data=serializer.data,
+                    message="Denomination retrieved successfully"
+                )
+            return self.success_response(
+                data=None,
+                message="No denomination found for user"
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
+    
+    def post(self, request):
+        try:
+            Denomination.objects.filter(user=request.user).delete()
+            serializer = self.serializer_class(data=request.data, context={'request': request})
+            if serializer.is_valid():
+                serializer.save()
+                return self.created_response(
+                    data=serializer.data,
+                    message="Denomination saved successfully"
+                )
+            return self.bad_request_response(
+                message="Invalid data provided",
+                errors=serializer.errors
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
 
-    class Meta:
-        verbose_name_plural = "Onboarding Progress"
+class FaithGoalView(BaseResponseMixin, generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = FaithGoalSerializer
+    
+    def get(self, request):
+        try:
+            goals = FaithGoal.objects.filter(user=request.user)
+            serializer = self.serializer_class(goals, many=True)
+            return self.success_response(
+                data=serializer.data,
+                message="Faith goals retrieved successfully"
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
+    
+    def post(self, request):
+        try:
+            serializer = self.serializer_class(data=request.data, context={'request': request})
+            if serializer.is_valid():
+                serializer.save()
+                return self.created_response(
+                    data=serializer.data,
+                    message="Faith goal saved successfully"
+                )
+            return self.bad_request_response(
+                message="Invalid data provided",
+                errors=serializer.errors
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
+
+class TonePreferenceView(BaseResponseMixin, generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = TonePreferenceSerializer
+    
+    def get(self, request):
+        try:
+            tone = TonePreference.objects.filter(user=request.user).first()
+            if tone:
+                serializer = self.serializer_class(tone)
+                return self.success_response(
+                    data=serializer.data,
+                    message="Tone preference retrieved successfully"
+                )
+            return self.success_response(
+                data=None,
+                message="No tone preference found for user"
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
+    
+    def post(self, request):
+        try:
+            TonePreference.objects.filter(user=request.user).delete()
+            serializer = self.serializer_class(data=request.data, context={'request': request})
+            if serializer.is_valid():
+                serializer.save()
+                return self.created_response(
+                    data=serializer.data,
+                    message="Tone preference saved successfully"
+                )
+            return self.bad_request_response(
+                message="Invalid data provided",
+                errors=serializer.errors
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
+
+class BibleFamiliarityView(BaseResponseMixin, generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = BibleFamiliaritySerializer
+    
+    def get(self, request):
+        try:
+            familiarity = BibleFamiliarity.objects.filter(user=request.user).first()
+            if familiarity:
+                serializer = self.serializer_class(familiarity)
+                return self.success_response(
+                    data=serializer.data,
+                    message="Bible familiarity retrieved successfully"
+                )
+            return self.success_response(
+                data=None,
+                message="No bible familiarity found for user"
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
+    
+    def post(self, request):
+        try:
+            BibleFamiliarity.objects.filter(user=request.user).delete()
+            serializer = self.serializer_class(data=request.data, context={'request': request})
+            if serializer.is_valid():
+                serializer.save()
+                return self.created_response(
+                    data=serializer.data,
+                    message="Bible familiarity saved successfully"
+                )
+            return self.bad_request_response(
+                message="Invalid data provided",
+                errors=serializer.errors
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
+
+class BibleVersionView(BaseResponseMixin, generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = BibleVersionSerializer
+    
+    def get(self, request):
+        try:
+            version = BibleVersion.objects.filter(user=request.user).first()
+            if version:
+                serializer = self.serializer_class(version)
+                return self.success_response(
+                    data=serializer.data,
+                    message="Bible version retrieved successfully"
+                )
+            return self.success_response(
+                data=None,
+                message="No bible version found for user"
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
+    
+    def post(self, request):
+        try:
+            BibleVersion.objects.filter(user=request.user).delete()
+            serializer = self.serializer_class(data=request.data, context={'request': request})
+            if serializer.is_valid():
+                serializer.save()
+                return self.created_response(
+                    data=serializer.data,
+                    message="Bible version saved successfully"
+                )
+            return self.bad_request_response(
+                message="Invalid data provided",
+                errors=serializer.errors
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
+
+# =============================================
+# ONBOARDING PROGRESS VIEWS
+# =============================================
+
+class OnboardingProgressView(BaseResponseMixin, generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            serializer = UserOnboardingProgressSerializer(request.user.profile)
+            return self.success_response(
+                data=serializer.data,
+                message="Onboarding progress retrieved successfully"
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
+    
+    def patch(self, request):
+        try:
+            serializer = UserOnboardingProgressSerializer(
+                request.user.profile, 
+                data=request.data, 
+                partial=True
+            )
+            if serializer.is_valid():
+                serializer.save()
+                return self.updated_response(
+                    data=serializer.data,
+                    message="Onboarding progress updated successfully"
+                )
+            return self.bad_request_response(
+                message="Invalid data provided",
+                errors=serializer.errors
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
+
+class OnboardingSummaryView(BaseResponseMixin, generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            serializer = UserOnboardingSummarySerializer(request.user)
+            return self.success_response(
+                data=serializer.data,
+                message="Onboarding summary retrieved successfully"
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
+
+class CompleteOnboardingView(BaseResponseMixin, generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            profile = request.user.profile
+            profile.onboarding_completed = True
+            profile.onboarding_completed_at = timezone.now()
+            profile.onboarding_step = 7
+            profile.save()
+            
+            return self.success_response(
+                message="Onboarding completed successfully",
+                data={
+                    "onboarding_completed": True,
+                    "completed_at": profile.onboarding_completed_at,
+                    "progress_percentage": 100
+                }
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
