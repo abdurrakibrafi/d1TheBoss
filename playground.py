@@ -1,193 +1,187 @@
-from rest_framework import generics, status, permissions
-from rest_framework.response import Response
-from rest_framework.decorators import action
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.views import APIView
-from django.contrib.auth import authenticate, get_user_model
-from django.contrib.auth.hashers import check_password
-# ... other imports
-from .mixins import BaseResponseMixin  # Import your mixin
+from django.db import models
+from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-class RegisterView(BaseResponseMixin, generics.CreateAPIView):
-    queryset = User.objects.all()
-    serializer_class = RegisterSerializer
-    permission_classes = (permissions.AllowAny,)
-    throttle_classes = [AnonRateThrottle]
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        
-        return self.success_response(
-            data={"email": user.email, "user_type": user.user_type},
-            message="Registration successful. Please check your email for verification code.",
-            status_code=status.HTTP_201_CREATED
-        )
+class Denomination(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
-class LoginView(BaseResponseMixin, generics.GenericAPIView):
-    permission_classes = (permissions.AllowAny,)
-    throttle_classes = [AnonRateThrottle]
+    def __str__(self):
+        return self.name
 
-    def post(self, request):
-        email = request.data.get("email")
-        password = request.data.get("password")
+    class Meta:
+        ordering = ['name']
 
-        if not email or not password:
-            return self.error_response(
-                message="Email and password are required",
-                status_code=status.HTTP_400_BAD_REQUEST
-            )
+        from django.db import models
 
-        user = authenticate(username=email, password=password)
+class Denomination(models.Model):
+    name = models.CharField(max_length=100)
+    parent = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        related_name='subdenominations',
+        on_delete=models.CASCADE
+    )
 
-        if user is not None:
-            if not user.is_active:
-                return self.error_response(
-                    message="Please verify your email before logging in",
-                    status_code=status.HTTP_401_UNAUTHORIZED
-                )
+    class Meta:
+        verbose_name = 'Denomination'
+        verbose_name_plural = 'Denominations'
 
-            refresh = RefreshToken.for_user(user)
-            return self.success_response(
-                data={
-                    "refresh": str(refresh),
-                    "access": str(refresh.access_token),
-                    "user": {
-                        "email": user.email,
-                        "user_type": user.user_type
-                    }
-                },
-                message="Login successful"
-            )
+    def __str__(self):
+        return self.name
+
+
+
+class FaithGoal(models.Model):
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ['name']
+
+
+class JourneyReason(models.Model):
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ['name']
+
+
+class TonePreference(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ['name']
+
+
+class BibleFamiliarity(models.Model):
+    level = models.CharField(max_length=50)  # None, A Little, A Lot
+    description = models.TextField(blank=True, null=True)
+    order = models.PositiveIntegerField(default=0)  # For ordering None=0, A Little=1, A Lot=2
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.level
+
+    class Meta:
+        ordering = ['order']
+        verbose_name_plural = "Bible Familiarities"
+
+
+class BibleVersion(models.Model):
+    name = models.CharField(max_length=200)  # Full name
+    abbreviation = models.CharField(max_length=20)  # RSVCE, NIV, CSB
+    copyright_info = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.abbreviation})"
+
+    class Meta:
+        ordering = ['name']
+
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    
+    # Onboarding choices
+    denomination = models.ForeignKey(Denomination, on_delete=models.SET_NULL, null=True, blank=True)
+    faith_goal = models.ForeignKey(FaithGoal, on_delete=models.SET_NULL, null=True, blank=True)
+    journey_reason = models.ForeignKey(JourneyReason, on_delete=models.SET_NULL, null=True, blank=True)
+    tone_preference = models.ForeignKey(TonePreference, on_delete=models.SET_NULL, null=True, blank=True)
+    bible_familiarity = models.ForeignKey(BibleFamiliarity, on_delete=models.SET_NULL, null=True, blank=True)
+    bible_version = models.ForeignKey(BibleVersion, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Onboarding status
+    onboarding_completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.email} - Profile"
+
+    @property
+    def onboarding_progress_percentage(self):
+        """Calculate onboarding completion percentage"""
+        total_fields = 6
+        completed_fields = sum([
+            1 if self.denomination else 0,
+            1 if self.faith_goal else 0,
+            1 if self.journey_reason else 0,
+            1 if self.tone_preference else 0,
+            1 if self.bible_familiarity else 0,
+            1 if self.bible_version else 0,
+        ])
+        return int((completed_fields / total_fields) * 100)
+
+    @property
+    def current_onboarding_step(self):
+        """Get current onboarding step (1-7)"""
+        if not self.denomination:
+            return 1
+        elif not self.faith_goal:
+            return 2
+        elif not self.journey_reason:
+            return 3
+        elif not self.tone_preference:
+            return 4
+        elif not self.bible_familiarity:
+            return 5
+        elif not self.bible_version:
+            return 6
         else:
-            return self.error_response(
-                message="Invalid email or password",
-                status_code=status.HTTP_401_UNAUTHORIZED
-            )
+            return 7  # Completed
 
-class LogoutView(BaseResponseMixin, generics.GenericAPIView):
-    permission_classes = (permissions.IsAuthenticated,)
-    throttle_classes = [UserRateThrottle]
+    def is_onboarding_complete(self):
+        """Check if all onboarding fields are filled"""
+        return all([
+            self.denomination,
+            self.faith_goal,
+            self.journey_reason, 
+            self.tone_preference,
+            self.bible_familiarity,
+            self.bible_version
+        ])
 
-    def post(self, request):
-        try:
-            refresh_token = request.data.get("refresh")
-            if not refresh_token:
-                return self.error_response(
-                    message="Refresh token is required",
-                    status_code=status.HTTP_400_BAD_REQUEST
-                )
-            
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-            
-            return self.success_response(
-                message="Logged out successfully",
-                status_code=status.HTTP_200_OK
-            )
-        except Exception as e:
-            return self.error_response(
-                message="Invalid or expired refresh token",
-                status_code=status.HTTP_400_BAD_REQUEST
-            )
+    class Meta:
+        ordering = ['-created_at']
 
-class ChangePasswordView(BaseResponseMixin, generics.GenericAPIView):
-    serializer_class = ChangePasswordSerializer
-    permission_classes = (permissions.IsAuthenticated,)
-    throttle_classes = [UserRateThrottle]
 
-    def post(self, request):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+class OnboardingProgress(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='onboarding_progress')
+    current_step = models.PositiveIntegerField(default=1)
+    started_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.user.email} - Step {self.current_step}"
 
-        user = request.user
-        old_password = serializer.validated_data["old_password"]
-        new_password = serializer.validated_data["new_password"]
-
-        if not check_password(old_password, user.password):
-            return self.error_response(
-                message="Current password is incorrect",
-                status_code=status.HTTP_400_BAD_REQUEST
-            )
-
-        user.set_password(new_password)
-        user.save()
-
-        return self.success_response(
-            message="Password changed successfully"
-        )
-
-class AccountSoftDeleteView(BaseResponseMixin, APIView):
-    permission_classes = (permissions.IsAuthenticated,)
-    throttle_classes = [UserRateThrottle]
-
-    def post(self, request):
-        serializer = AccountSoftDeleteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        user = request.user
-        user.soft_delete()
-        
-        return self.success_response(
-            message="Account has been deactivated successfully"
-        )
-
-class AccountRestoreView(BaseResponseMixin, APIView):
-    permission_classes = (permissions.IsAdminUser,)
-
-    def post(self, request):
-        serializer = AccountRestoreSerializer(data=request.data)
-        if not serializer.is_valid():
-            return self.error_response(
-                message="Invalid data provided",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST
-            )
-
-        user = serializer.user
-        user.restore()
-
-        return self.success_response(
-            data={"email": user.email},
-            message="Account restored successfully"
-        )
-
-class ResendOTPView(BaseResponseMixin, generics.GenericAPIView):
-    serializer_class = ResendOTPSerializer
-    permission_classes = (permissions.AllowAny,)
-    throttle_classes = [AnonRateThrottle]
-
-    def post(self, request):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        email = serializer.validated_data["email"]
-        purpose = serializer.validated_data["purpose"]
-
-        try:
-            user = User.objects.get(email=email)
-
-            if purpose == "verification":
-                if user.is_active:
-                    return self.error_response(
-                        message="Email is already verified",
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
-                register_serializer = RegisterSerializer()
-                register_serializer.send_verification_otp(user)
-            elif purpose == "password_reset":
-                reset_serializer = PasswordResetRequestSerializer()
-                reset_serializer.send_reset_otp(email)
-
-            return self.success_response(
-                message="OTP has been sent to your email"
-            )
-
-        except User.DoesNotExist:
-            # Return success message for security (don't reveal if email exists)
-            return self.success_response(
-                message="If the email exists, an OTP has been sent"
-            )
+    class Meta:
+        verbose_name_plural = "Onboarding Progress"

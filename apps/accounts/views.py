@@ -78,6 +78,7 @@ class InitiateRegistrationView(BaseResponseMixin, generics.GenericAPIView):
             message=message,
             status_code=status.HTTP_200_OK
         )
+    
 class CompleteRegistrationView(BaseResponseMixin, generics.GenericAPIView):
     serializer_class = CompleteRegistrationSerializer
     permission_classes = (permissions.AllowAny,)
