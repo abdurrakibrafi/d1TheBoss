@@ -327,6 +327,27 @@ class OnboardingSummaryView(BaseResponseMixin, generics.GenericAPIView):
         except Exception as exc:
             return self.handle_exception(exc)
 
+class OnboardingStatusView(BaseResponseMixin, generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            profile = request.user.profile
+            
+            # Calculate progress percentage based on current step
+            progress_percentage = (profile.onboarding_step / 7) * 100 if profile.onboarding_step else 0
+            
+            return self.success_response(
+                data={
+                    "onboarding_completed": profile.onboarding_completed,
+                    "current_step": profile.onboarding_step,
+                    "completed_at": profile.onboarding_completed_at,
+                    "progress_percentage": progress_percentage
+                }
+            )
+        except Exception as exc:
+            return self.handle_exception(exc)
+
 class CompleteOnboardingView(BaseResponseMixin, generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
     
@@ -348,3 +369,4 @@ class CompleteOnboardingView(BaseResponseMixin, generics.GenericAPIView):
             )
         except Exception as exc:
             return self.handle_exception(exc)
+

@@ -16,5 +16,6 @@ urlpatterns = [
     # Progress tracking
     path('progress/', views.OnboardingProgressView.as_view(), name='onboarding-progress'),
     path('summary/', views.OnboardingSummaryView.as_view(), name='onboarding-summary'),
+    path('status/', views.OnboardingStatusView.as_view(), name='onboarding-status'),
     path('complete/', views.CompleteOnboardingView.as_view(), name='complete-onboarding'),
-]
+]   
