@@ -19,6 +19,7 @@ from apps.onboarding.serializers import (
     OnboardingOptionsSerializer, 
     UserOnboardingProgressSerializer,
     UserOnboardingSummarySerializer,
+    BulkFaithGoalSerializer
 
 )
 from apps.onboarding.models import (
@@ -140,12 +141,12 @@ class DenominationView(BaseResponseMixin, generics.GenericAPIView):
 
 class FaithGoalView(BaseResponseMixin, generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = FaithGoalSerializer
+    serializer_class = BulkFaithGoalSerializer
     
     def get(self, request):
         try:
             goals = FaithGoal.objects.filter(user=request.user)
-            serializer = self.serializer_class(goals, many=True)
+            serializer = FaithGoalSerializer(goals, many=True)
             return self.success_response(
                 data=serializer.data,
                 message="Faith goals retrieved successfully"
@@ -159,8 +160,8 @@ class FaithGoalView(BaseResponseMixin, generics.GenericAPIView):
             if serializer.is_valid():
                 serializer.save()
                 return self.created_response(
-                    data=serializer.data,
-                    message="Faith goal saved successfully"
+                    data="Goals saved successfully",
+                    message="Faith goals saved successfully"
                 )
             return self.bad_request_response(
                 message="Invalid data provided",
@@ -168,6 +169,7 @@ class FaithGoalView(BaseResponseMixin, generics.GenericAPIView):
             )
         except Exception as exc:
             return self.handle_exception(exc)
+        
 
 class TonePreferenceView(BaseResponseMixin, generics.GenericAPIView):
     permission_classes = [IsAuthenticated]

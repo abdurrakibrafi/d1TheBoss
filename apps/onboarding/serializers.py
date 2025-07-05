@@ -89,19 +89,28 @@ class DenominationSerializer(serializers.ModelSerializer):
     
 
 class FaithGoalSerializer(serializers.ModelSerializer):
-    faith_goal_detail = FaithGoalQuestionSerializer(
-        source='faith_goal_option.faith_goal_question', 
-        read_only=True
-    )
-    
     class Meta:
         model = FaithGoal
-        fields = ['id', 'faith_goal_option', 'faith_goal_detail', 'text', 'created_at', 'updated_at']
-        read_only_fields = ['created_at', 'updated_at']
+        fields = ['id', 'user', 'faith_goal_option', 'text', 'created_at']
+        read_only_fields = ['user', 'created_at']
+
+class BulkFaithGoalSerializer(serializers.Serializer):
+    goals = FaithGoalSerializer(many=True)
     
     def create(self, validated_data):
-        validated_data['user'] = self.context['request'].user
-        return super().create(validated_data)
+        goals_data = validated_data['goals']
+        user = self.context['request'].user
+        
+        # Delete existing goals for this user
+        FaithGoal.objects.filter(user=user).delete()
+        
+        # Create new goals
+        goals = []
+        for goal_data in goals_data:
+            goal_data['user'] = user
+            goals.append(FaithGoal(**goal_data))
+        
+        return FaithGoal.objects.bulk_create(goals)
 
 
 class TonePreferenceSerializer(serializers.ModelSerializer):
