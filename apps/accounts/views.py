@@ -227,7 +227,7 @@ class LogoutView(BaseResponseMixin, generics.GenericAPIView):
                 status_code=status.HTTP_400_BAD_REQUEST
             )
 
-class PasswordResetRequestView(generics.GenericAPIView):
+class PasswordResetRequestView(BaseResponseMixin, generics.GenericAPIView):
     serializer_class = PasswordResetRequestSerializer
     permission_classes = (permissions.AllowAny,)
     throttle_classes = [AnonRateThrottle]
@@ -239,13 +239,12 @@ class PasswordResetRequestView(generics.GenericAPIView):
         email = serializer.validated_data["email"]
         serializer.send_reset_otp(email)
 
-        return Response(
-            {"message": "If the email exists, a password reset OTP has been sent"},
-            status=status.HTTP_200_OK,
+        return self.success_response(
+            message="If the email exists, a password reset OTP has been sent",
+            status_code=status.HTTP_200_OK,
         )
 
-
-class PasswordResetOTPVerifyView(generics.GenericAPIView):
+class PasswordResetOTPVerifyView(BaseResponseMixin, generics.GenericAPIView):
     serializer_class = PasswordResetOTPVerifySerializer
     permission_classes = (permissions.AllowAny,)
     throttle_classes = [AnonRateThrottle]
@@ -254,16 +253,14 @@ class PasswordResetOTPVerifyView(generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        return Response(
-            {
-                "message": "OTP verified successfully",
-                "email": serializer.validated_data["email"],
-            },
-            status=status.HTTP_200_OK,
+        return self.success_response(
+            data={"email": serializer.validated_data["email"]},
+            message="OTP verified successfully",
+            status_code=status.HTTP_200_OK,
         )
 
 
-class PasswordResetConfirmView(generics.GenericAPIView):
+class PasswordResetConfirmView(BaseResponseMixin, generics.GenericAPIView):
     serializer_class = PasswordResetConfirmSerializer
     permission_classes = (permissions.AllowAny,)
     throttle_classes = [AnonRateThrottle]
@@ -272,11 +269,10 @@ class PasswordResetConfirmView(generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        return Response(
-            {"message": "Password has been reset successfully"},
-            status=status.HTTP_200_OK,
+        return self.success_response(
+            message="Password has been reset successfully",
+            status_code=status.HTTP_200_OK,
         )
-
 
 class ChangePasswordView(BaseResponseMixin, generics.GenericAPIView):
     serializer_class = ChangePasswordSerializer

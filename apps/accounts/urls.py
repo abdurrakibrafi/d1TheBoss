@@ -35,22 +35,22 @@ urlpatterns = [
     path("logout/", LogoutView.as_view(), name="logout"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     # Password management
-    # path(
-    #     "password/reset-request/",
-    #     PasswordResetRequestView.as_view(),
-    #     name="password-reset-request",
-    # ),
-    # path(
-    #     "password/reset-verify-otp/",
-    #     PasswordResetOTPVerifyView.as_view(),
-    #     name="password-reset-verify-otp",
-    # ),
-    # path(
-    #     "password/reset-confirm/",
-    #     PasswordResetConfirmView.as_view(),
-    #     name="password-reset-confirm-view",
-    # ),
-    # path("password/change/", ChangePasswordView.as_view(), name="password-change"),
+    path(
+        "password/reset-request/",
+        PasswordResetRequestView.as_view(),
+        name="password-reset-request",
+    ),
+    path(
+        "password/reset-verify-otp/",
+        PasswordResetOTPVerifyView.as_view(),
+        name="password-reset-verify-otp",
+    ),  
+    path(
+        "password/reset-confirm/",
+        PasswordResetConfirmView.as_view(),
+        name="password-reset-confirm-view",
+    ),
+    path("password/change/", ChangePasswordView.as_view(), name="password-change"),
     # path("google/login/", GoogleLogin.as_view(), name="google_login"),
     # path("apple/login/", AppleLogin.as_view(), name="apple_login"),
     # path("account/delete/", AccountSoftDeleteView.as_view(), name="account-delete"),

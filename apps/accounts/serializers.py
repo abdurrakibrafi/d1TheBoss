@@ -230,14 +230,9 @@ class PasswordResetRequestSerializer(serializers.Serializer):
                 purpose="password_reset",
                 expires_at=timezone.now() + timedelta(minutes=10),
             )
+            
+            send_otp_email(user, otp_code, "password_reset")  
 
-            send_mail(
-                "Password Reset",
-                f"Your password reset code is: {otp_code}. Valid for 10 minutes.",
-                settings.DEFAULT_FROM_EMAIL,
-                [user.email],
-                fail_silently=False,
-            )
             return True
         except User.DoesNotExist:
             return True
