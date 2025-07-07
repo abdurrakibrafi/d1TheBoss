@@ -12,7 +12,7 @@ class JourneyReasonOption(models.Model):
         return f"{self.option}"
     
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at"]
         verbose_name_plural = "01. Journey Reason Options"
 
 class JourneyReason(models.Model):
@@ -25,7 +25,7 @@ class JourneyReason(models.Model):
         return f"{self.user.email} - {self.journey_reason.option}"  # FIX THIS
     
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at"]
         verbose_name_plural = "02. Journey Reasons"
 
 class DenominationOption(models.Model):
@@ -39,7 +39,7 @@ class DenominationOption(models.Model):
         return self.name
     
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at"]
         verbose_name_plural = "03. Denomination Options"
 
 class Denomination(models.Model):
@@ -53,7 +53,7 @@ class Denomination(models.Model):
         return self.name
     
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at"]
         verbose_name_plural = "04. Denominations"
 
 class FaithGoalQuestion(models.Model):
@@ -67,7 +67,7 @@ class FaithGoalQuestion(models.Model):
         return f"{self.question}"
     
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at"]
         verbose_name_plural = "05. Faith Goal Questions"
 
     
@@ -85,7 +85,7 @@ class FaithGoalOption(models.Model):
         return "Option (no question)"
 
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at"]
         verbose_name_plural = "06. Faith Goal Options"
 
 class FaithGoal(models.Model):
@@ -103,7 +103,7 @@ class FaithGoal(models.Model):
 
     
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at"]
         verbose_name_plural = "07. Faith Goals"
 
 class TonePreferenceOption(models.Model):
@@ -118,7 +118,7 @@ class TonePreferenceOption(models.Model):
         return f"{self.option_title}"
     
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at"]
         verbose_name_plural = "08. Tone Preference Options"
 
 class TonePreference(models.Model):
@@ -132,7 +132,7 @@ class TonePreference(models.Model):
         return self.tone_preference_option.option_title
     
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at"]
         verbose_name_plural = "09. Tone Preferences"
     
 class BibleFamiliarityOption(models.Model):
@@ -146,7 +146,7 @@ class BibleFamiliarityOption(models.Model):
         return self.option
     
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at"]
         verbose_name_plural = "10. Bible Familiarity Options"
 
 
@@ -162,7 +162,7 @@ class BibleFamiliarity(models.Model):
         return f"{self.bible_familiarity_option.option}"
     
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at"]
         verbose_name_plural = "11. Bible Familiarity"
     
 class BibleVersionOption(models.Model):
@@ -177,7 +177,7 @@ class BibleVersionOption(models.Model):
         return self.title
     
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at"]
         verbose_name_plural = "12. Bible Version Options"
 
 
@@ -192,7 +192,7 @@ class BibleVersion(models.Model):
         return f"{self.bible_version_option.title}"
     
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at"]
         verbose_name_plural = "13. Bible Versions"
 
     
