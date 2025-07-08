@@ -1,326 +1,143 @@
-# apps/core/views.py
+class LegalDocument(models.Model):
+    DOCUMENT_TYPES = [
+        ('terms', 'Terms and Conditions'),
+        ('privacy', 'Privacy Policy'),
+    ]
+    
+    document_type = models.CharField(max_length=20, choices=DOCUMENT_TYPES, unique=True)
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    version = models.CharField(max_length=10, default='1.0')
+    is_active = models.BooleanField(default=True)
+    effective_date = models.DateTimeField(default=timezone.now)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.get_document_type_display()} - v{self.version}"
+    
+    class Meta:
+        verbose_name = "Legal Document"
+        verbose_name_plural = "Legal Documents"
+        ordering = ['-created_at']
 
-from rest_framework import generics, status
-from rest_framework.permissions import IsAuthenticated
-from django.shortcuts import get_object_or_404
-from apps.core.mixins import BaseResponseMixin  # Import your mixin
 
-# =============================================
-# MASTER DATA VIEWS (GET only)
-# =============================================
+class LegalDocumentSerializer(serializers.ModelSerializer):
+    document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+    
+    class Meta:
+        model = LegalDocument
+        fields = [
+            'id', 'document_type', 'document_type_display', 
+            'title', 'content', 'version', 'effective_date'
+        ]
+        read_only_fields = ['id']
 
-class OnboardingOptionsView(BaseResponseMixin, generics.GenericAPIView):
-    """Get all onboarding options in one call"""
-    permission_classes = [IsAuthenticated]
+
+
+    class TermsAndConditionsView(BaseResponseMixin, generics.GenericAPIView):
+    serializer_class = LegalDocumentSerializer
     
     def get(self, request):
+        """Get current Terms and Conditions"""
         try:
-            data = {
-                'journey_reasons': JourneyReasonOption.objects.filter(is_active=True),
-                'denominations': DenominationOption.objects.filter(is_active=True),  # Remove is_parent=True
-                'faith_goal_questions': FaithGoalQuestion.objects.filter(is_active=True),
-                'tone_preferences': TonePreferenceOption.objects.filter(is_active=True),
-                'bible_familiarity': BibleFamiliarityOption.objects.filter(is_active=True),
-                'bible_versions': BibleVersionOption.objects.filter(is_active=True),
-            }
-            serializer = OnboardingOptionsSerializer(data)
-            return self.success_response(
-                data=serializer.data,
-                message="Onboarding options retrieved successfully"
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-
-# =============================================
-# USER SELECTION VIEWS (GET/POST)
-# =============================================
-
-class JourneyReasonView(BaseResponseMixin, generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = JourneyReasonSerializer
-    
-    def get(self, request):
-        try:
-            journey = JourneyReason.objects.filter(user=request.user).first()
-            if journey:
-                serializer = self.serializer_class(journey)
-                return self.success_response(
-                    data=serializer.data,
-                    message="Journey reason retrieved successfully"
-                )
-            return self.success_response(
-                data=None,
-                message="No journey reason found for user"
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-    
-    def post(self, request):
-        try:
-            # Delete existing first (one choice only)
-            JourneyReason.objects.filter(user=request.user).delete()
+            terms = LegalDocument.objects.filter(
+                document_type='terms',
+                is_active=True
+            ).first()
             
-            serializer = self.serializer_class(data=request.data, context={'request': request})
-            if serializer.is_valid():
-                serializer.save()
-                return self.created_response(
-                    data=serializer.data,
-                    message="Journey reason saved successfully"
+            if not terms:
+                return self.bad_request_response(
+                    message="Terms and Conditions not found",
+                    error_code="TERMS_NOT_FOUND"
                 )
-            return self.bad_request_response(
-                message="Invalid data provided",
-                errors=serializer.errors
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-
-class DenominationView(BaseResponseMixin, generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = DenominationSerializer
-    
-    def get(self, request):
-        try:
-            denomination = Denomination.objects.filter(user=request.user).first()
-            if denomination:
-                serializer = self.serializer_class(denomination)
-                return self.success_response(
-                    data=serializer.data,
-                    message="Denomination retrieved successfully"
-                )
-            return self.success_response(
-                data=None,
-                message="No denomination found for user"
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-    
-    def post(self, request):
-        try:
-            Denomination.objects.filter(user=request.user).delete()
-            serializer = self.serializer_class(data=request.data, context={'request': request})
-            if serializer.is_valid():
-                serializer.save()
-                return self.created_response(
-                    data=serializer.data,
-                    message="Denomination saved successfully"
-                )
-            return self.bad_request_response(
-                message="Invalid data provided",
-                errors=serializer.errors
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-
-class FaithGoalView(BaseResponseMixin, generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = FaithGoalSerializer
-    
-    def get(self, request):
-        try:
-            goals = FaithGoal.objects.filter(user=request.user)
-            serializer = self.serializer_class(goals, many=True)
-            return self.success_response(
-                data=serializer.data,
-                message="Faith goals retrieved successfully"
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-    
-    def post(self, request):
-        try:
-            serializer = self.serializer_class(data=request.data, context={'request': request})
-            if serializer.is_valid():
-                serializer.save()
-                return self.created_response(
-                    data=serializer.data,
-                    message="Faith goal saved successfully"
-                )
-            return self.bad_request_response(
-                message="Invalid data provided",
-                errors=serializer.errors
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-
-class TonePreferenceView(BaseResponseMixin, generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = TonePreferenceSerializer
-    
-    def get(self, request):
-        try:
-            tone = TonePreference.objects.filter(user=request.user).first()
-            if tone:
-                serializer = self.serializer_class(tone)
-                return self.success_response(
-                    data=serializer.data,
-                    message="Tone preference retrieved successfully"
-                )
-            return self.success_response(
-                data=None,
-                message="No tone preference found for user"
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-    
-    def post(self, request):
-        try:
-            TonePreference.objects.filter(user=request.user).delete()
-            serializer = self.serializer_class(data=request.data, context={'request': request})
-            if serializer.is_valid():
-                serializer.save()
-                return self.created_response(
-                    data=serializer.data,
-                    message="Tone preference saved successfully"
-                )
-            return self.bad_request_response(
-                message="Invalid data provided",
-                errors=serializer.errors
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-
-class BibleFamiliarityView(BaseResponseMixin, generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = BibleFamiliaritySerializer
-    
-    def get(self, request):
-        try:
-            familiarity = BibleFamiliarity.objects.filter(user=request.user).first()
-            if familiarity:
-                serializer = self.serializer_class(familiarity)
-                return self.success_response(
-                    data=serializer.data,
-                    message="Bible familiarity retrieved successfully"
-                )
-            return self.success_response(
-                data=None,
-                message="No bible familiarity found for user"
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-    
-    def post(self, request):
-        try:
-            BibleFamiliarity.objects.filter(user=request.user).delete()
-            serializer = self.serializer_class(data=request.data, context={'request': request})
-            if serializer.is_valid():
-                serializer.save()
-                return self.created_response(
-                    data=serializer.data,
-                    message="Bible familiarity saved successfully"
-                )
-            return self.bad_request_response(
-                message="Invalid data provided",
-                errors=serializer.errors
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-
-class BibleVersionView(BaseResponseMixin, generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = BibleVersionSerializer
-    
-    def get(self, request):
-        try:
-            version = BibleVersion.objects.filter(user=request.user).first()
-            if version:
-                serializer = self.serializer_class(version)
-                return self.success_response(
-                    data=serializer.data,
-                    message="Bible version retrieved successfully"
-                )
-            return self.success_response(
-                data=None,
-                message="No bible version found for user"
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-    
-    def post(self, request):
-        try:
-            BibleVersion.objects.filter(user=request.user).delete()
-            serializer = self.serializer_class(data=request.data, context={'request': request})
-            if serializer.is_valid():
-                serializer.save()
-                return self.created_response(
-                    data=serializer.data,
-                    message="Bible version saved successfully"
-                )
-            return self.bad_request_response(
-                message="Invalid data provided",
-                errors=serializer.errors
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-
-# =============================================
-# ONBOARDING PROGRESS VIEWS
-# =============================================
-
-class OnboardingProgressView(BaseResponseMixin, generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        try:
-            serializer = UserOnboardingProgressSerializer(request.user.profile)
-            return self.success_response(
-                data=serializer.data,
-                message="Onboarding progress retrieved successfully"
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-    
-    def patch(self, request):
-        try:
-            serializer = UserOnboardingProgressSerializer(
-                request.user.profile, 
-                data=request.data, 
-                partial=True
-            )
-            if serializer.is_valid():
-                serializer.save()
-                return self.updated_response(
-                    data=serializer.data,
-                    message="Onboarding progress updated successfully"
-                )
-            return self.bad_request_response(
-                message="Invalid data provided",
-                errors=serializer.errors
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-
-class OnboardingSummaryView(BaseResponseMixin, generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        try:
-            serializer = UserOnboardingSummarySerializer(request.user)
-            return self.success_response(
-                data=serializer.data,
-                message="Onboarding summary retrieved successfully"
-            )
-        except Exception as exc:
-            return self.handle_exception(exc)
-
-class CompleteOnboardingView(BaseResponseMixin, generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request):
-        try:
-            profile = request.user.profile
-            profile.onboarding_completed = True
-            profile.onboarding_completed_at = timezone.now()
-            profile.onboarding_step = 7
-            profile.save()
+            
+            serializer = self.get_serializer(terms)
             
             return self.success_response(
-                message="Onboarding completed successfully",
-                data={
-                    "onboarding_completed": True,
-                    "completed_at": profile.onboarding_completed_at,
-                    "progress_percentage": 100
-                }
+                data=serializer.data,
+                message="Terms and Conditions retrieved successfully"
             )
-        except Exception as exc:
-            return self.handle_exception(exc)
+            
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+class PrivacyPolicyView(BaseResponseMixin, generics.GenericAPIView):
+    serializer_class = LegalDocumentSerializer
+    
+    def get(self, request):
+        """Get current Privacy Policy"""
+        try:
+            privacy = LegalDocument.objects.filter(
+                document_type='privacy',
+                is_active=True
+            ).first()
+            
+            if not privacy:
+                return self.bad_request_response(
+                    message="Privacy Policy not found",
+                    error_code="PRIVACY_NOT_FOUND"
+                )
+            
+            serializer = self.get_serializer(privacy)
+            
+            return self.success_response(
+                data=serializer.data,
+                message="Privacy Policy retrieved successfully"
+            )
+            
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+# Alternative: Combined view if you prefer
+class LegalDocumentView(BaseResponseMixin, generics.GenericAPIView):
+    serializer_class = LegalDocumentSerializer
+    
+    def get(self, request, document_type):
+        """Get legal document by type"""
+        try:
+            if document_type not in ['terms', 'privacy']:
+                return self.bad_request_response(
+                    message="Invalid document type",
+                    error_code="INVALID_DOCUMENT_TYPE"
+                )
+            
+            document = LegalDocument.objects.filter(
+                document_type=document_type,
+                is_active=True
+            ).first()
+            
+            if not document:
+                return self.bad_request_response(
+                    message=f"{document_type.title()} document not found",
+                    error_code="DOCUMENT_NOT_FOUND"
+                )
+            
+            serializer = self.get_serializer(document)
+            
+            return self.success_response(
+                data=serializer.data,
+                message=f"{document.get_document_type_display()} retrieved successfully"
+            )
+            
+        except Exception as e:
+            return self.handle_exception(e)
+        
+
+    # Option 1: Separate endpoints
+path("legal/terms/", TermsAndConditionsView.as_view(), name="terms-conditions"),
+path("legal/privacy/", PrivacyPolicyView.as_view(), name="privacy-policy"),
+
+# Option 2: Combined endpoint
+path("legal/<str:document_type>/", LegalDocumentView.as_view(), name="legal-document"),
+
+
+@admin.register(LegalDocument)
+class LegalDocumentAdmin(admin.ModelAdmin):
+    list_display = ['document_type', 'title', 'version', 'is_active', 'effective_date']
+    list_filter = ['document_type', 'is_active', 'effective_date']
+    search_fields = ['title', 'content']
+    readonly_fields = ['created_at', 'updated_at']

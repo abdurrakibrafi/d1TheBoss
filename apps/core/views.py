@@ -5,8 +5,105 @@ from apps.core.utils.mixins import BaseResponseMixin
 from apps.core.utils.fake_user_data import FakeDataGenerator
 from django.shortcuts import render
 from django.views.generic import TemplateView
+from rest_framework import generics
+from apps.core.serializers import LegalDocumentSerializer
+from apps.core.models import LegalDocument
 
-# Create your views here.
+
+class TermsAndConditionsView(BaseResponseMixin, generics.RetrieveAPIView):
+    serializer_class = LegalDocumentSerializer
+
+    def get(self, request, *args, **kwargs):
+        """Get current Terms and Conditions"""
+
+        try:
+            terms = LegalDocument.objects.filter(
+                document_type='terms',
+                is_active=True
+            ).first()
+
+            if not terms:
+                return self.bad_request_response(
+                    message="Terms and Conditions not found",
+                )
+
+            serializer = self.get_serializer(terms)
+
+            return self.success_response(
+                data=serializer.data,
+                message="Terms and Conditions retrieved successfully"
+            )
+
+        except Exception as e:  
+            return self.handle_exception(e)
+        
+
+class PrivacyPolicyView(BaseResponseMixin, generics.RetrieveAPIView):
+    serializer_class = LegalDocumentSerializer
+
+    def get(self, request, *args, **kwargs):
+        """Get current Privacy Policy"""    
+
+        try:
+            privacy = LegalDocument.objects.filter(
+                document_type='privacy',
+                is_active=True
+            ).first()
+
+            if not privacy:
+                return self.bad_request_response(
+                    message="Privacy Policy not found",
+                )
+
+            serializer = self.get_serializer(privacy)
+
+            return self.success_response(
+                data=serializer.data,
+                message="Privacy Policy retrieved successfully"
+            )
+
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 class APIGuideView(TemplateView):
