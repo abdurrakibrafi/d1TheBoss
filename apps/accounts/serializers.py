@@ -412,123 +412,6 @@ class AccountRestoreSerializer(serializers.Serializer):
         self.user = user
         return value
 
-
-class ProfileUpdateSerializer(serializers.ModelSerializer):
-    email = serializers.EmailField(source="user.email", required=False)
-
-    class Meta:
-        model = UserProfile
-        fields = ["name", "email", "phone", "date_of_birth", "gender", "bio"]
-
-    def validate_email(self, value):
-        user = self.instance.user
-
-        # If email hasn't changed, no need for validation
-        if user.email == value:
-            return value
-
-        # Check if email is already taken
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError("This email is already in use.")
-
-        return value
-
-    def update(self, instance, validated_data):
-        user_data = validated_data.pop("user", {})
-        email_changed = False
-        new_email = None
-
-        # Check if email is being changed
-        if "email" in user_data and user_data["email"] != instance.user.email:
-            email_changed = True
-            new_email = user_data.pop("email")  # Remove email from immediate update
-
-            # Store temporary email
-            instance.temp_email = new_email
-
-            # Generate and send OTP
-            otp_code = "".join(random.choices("0123456789", k=4))
-            OTP.objects.create(
-                user=instance.user,
-                otp=otp_code,
-                purpose="email_change",
-                expires_at=timezone.now() + timedelta(minutes=10),
-            )
-
-            # Send verification email
-            send_mail(
-                "Verify Your New Email",
-                f"Your verification code is: {otp_code}. Valid for 10 minutes.",
-                settings.DEFAULT_FROM_EMAIL,
-                [new_email],
-                fail_silently=False,
-            )
-
-        # Update User model fields (except email)
-        if user_data:
-            user = instance.user
-            for attr, value in user_data.items():
-                setattr(user, attr, value)
-            user.save()
-
-        # Update UserProfile fields
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-
-        return instance, email_changed
-
-
-class VerifyEmailChangeSerializer(serializers.Serializer):
-    otp = serializers.CharField(max_length=4, min_length=4)
-
-    def validate(self, attrs):
-        user = self.context["request"].user
-        otp_code = attrs.get("otp")
-
-        if not user.profile.temp_email:
-            raise serializers.ValidationError({"detail": "No email change pending."})
-
-        try:
-            otp = OTP.objects.filter(
-                user=user, purpose="email_change", otp=otp_code, is_used=False
-            ).latest("created_at")
-
-            if not otp.is_valid():
-                raise serializers.ValidationError({"otp": "OTP has expired."})
-
-            attrs["otp_object"] = otp
-            return attrs
-
-        except OTP.DoesNotExist:
-            raise serializers.ValidationError({"otp": "Invalid OTP."})
-
-    def save(self):
-        user = self.context["request"].user
-        otp = self.validated_data["otp_object"]
-
-        old_email = user.email
-        new_email = user.profile.temp_email
-
-        otp.is_used = True
-        otp.save()
-
-        user.email = new_email
-        user.save()
-
-        user.profile.temp_email = None
-        user.profile.save()
-
-        send_mail(
-            "Email Address Changed",
-            f"Your email has been changed from {old_email} to {new_email}.",
-            settings.DEFAULT_FROM_EMAIL,
-            [old_email],
-            fail_silently=False,
-        )
-
-        return user
-    
 from apps.accounts.models import SOCIAL_AUTH_PROVIDERS
 
 class SocialAuthSerializer(serializers.Serializer):
@@ -568,3 +451,118 @@ class SocialAuthSerializer(serializers.Serializer):
             user.profile.save()
             
         return user
+    
+
+
+class ProfileUpdateSerializer(serializers.ModelSerializer):
+    # User fields
+    email = serializers.EmailField(required=False)
+    
+    # Profile fields
+    name = serializers.CharField(max_length=100, required=False)
+    date_of_birth = serializers.DateField(required=False)
+ 
+    profile_picture = serializers.ImageField(required=False, allow_null=True)
+    
+    # Add this field to handle image deletion
+    remove_profile_picture = serializers.BooleanField(required=False, default=False)
+    
+    class Meta:
+        model = UserProfile
+        fields = [
+            'email', 'name', 'date_of_birth', 
+            'profile_picture', 'remove_profile_picture'
+        ]
+    
+    def validate_profile_picture(self, value):
+        if value:
+            # Check file size (e.g., max 5MB)
+            if value.size > 5 * 1024 * 1024:
+                raise serializers.ValidationError("Image file too large. Maximum size is 5MB.")
+            
+            # Check file type
+            allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+            if value.content_type not in allowed_types:
+                raise serializers.ValidationError("Only JPEG, PNG, GIF, and WebP images are allowed.")
+        
+        return value
+    
+    def validate_email(self, value):
+        user = self.context['request'].user
+        if value and value != user.email:
+            if User.objects.filter(email=value).exists():
+                raise serializers.ValidationError("This email is already in use.")
+        return value
+    
+    def update(self, instance, validated_data):
+        user = instance.user
+        email = validated_data.pop('email', None)
+        remove_profile_picture = validated_data.pop('remove_profile_picture', False)
+        
+        # Handle profile picture removal
+        if remove_profile_picture:
+            if instance.profile_picture:
+                # Delete the old image file
+                instance.profile_picture.delete(save=False)
+            instance.profile_picture = None
+        
+        # Handle email change separately
+        if email and email != user.email:
+            # Store new email temporarily
+            instance.temp_email = email
+            instance.save()
+            
+            # Generate OTP for email verification
+            otp_code = self.generate_otp()
+            OTP.objects.create(
+                user=user,
+                otp=otp_code,
+                purpose='email_change',
+                expires_at=timezone.now() + timedelta(minutes=10)
+            )
+            
+            send_otp_email(user, otp_code, "email_change")
+        
+        # Update other profile fields
+        for attr, value in validated_data.items():
+            if attr == 'profile_picture' and value:
+                # Delete old image if exists
+                if instance.profile_picture:
+                    instance.profile_picture.delete(save=False)
+            setattr(instance, attr, value)
+        
+        instance.save()
+        return instance
+    
+    def generate_otp(self):
+        return str(random.randint(1000, 9999))
+
+    def to_representation(self, instance):
+        """Custom representation to include full image URL"""
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        
+        if instance.profile_picture and request:
+            data['profile_picture'] = request.build_absolute_uri(instance.profile_picture.url)
+        
+        return data
+    
+
+
+class VerifyEmailChangeSerializer(serializers.Serializer):
+    otp = serializers.CharField(
+        max_length=4, 
+        min_length=4,
+        required=True,
+        help_text="4-digit OTP code sent to your new email address"
+    )
+    
+    def validate_otp(self, value):
+        if not value.isdigit():
+            raise serializers.ValidationError("OTP must contain only digits")
+        return value
+
+class ResendEmailChangeOTPSerializer(serializers.Serializer):
+    # This serializer doesn't need any input fields since it just resends OTP
+    # to the temp_email already stored in the user's profile
+    pass
