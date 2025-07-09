@@ -20,7 +20,7 @@ SECRET_KEY = env("SECRET_KEY", default="your-default-secret-key-change-this")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DEBUG", default=True)
 
-ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', '0.0.0.0']
+ALLOWED_HOSTS = ["*", "localhost", "127.0.0.1", "0.0.0.0"]
 
 # Application definition
 INSTALLED_APPS = [
@@ -28,7 +28,7 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
-    "django.contrib.messages",  
+    "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.sites",
     # Third party apps
@@ -152,9 +152,9 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle",
         "rest_framework.throttling.AnonRateThrottle",
     ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '20/minute',
-        'user': '1000/day',
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "20/minute",
+        "user": "1000/day",
     },
 }
 

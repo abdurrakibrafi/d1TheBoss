@@ -22,6 +22,7 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("is_superuser", True)
         return self.create_user(email, password, **extra_fields)
 
+
 SOCIAL_AUTH_PROVIDERS = (
     ("google", "Google"),
     ("apple", "Apple"),
@@ -44,6 +45,7 @@ SOCIAL_AUTH_PROVIDERS = (
     ("telegram", "Telegram"),
     ("other", "Other"),
 )
+
 
 class User(AbstractUser):
     email = models.EmailField(unique=True)
@@ -141,7 +143,7 @@ class UserProfile(models.Model):
     )
 
     profile_completed = models.BooleanField(default=False)
-    
+
     onboarding_step = models.IntegerField(default=0)  # 0-7 for your pages
     onboarding_completed = models.BooleanField(default=False)
     onboarding_completed_at = models.DateTimeField(blank=True, null=True)
@@ -151,7 +153,6 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"Profile for {self.user.email}"
-
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)

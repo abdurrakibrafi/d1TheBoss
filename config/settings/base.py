@@ -28,7 +28,7 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
-    "django.contrib.messages",  
+    "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.sites",
     # Third party apps
@@ -50,6 +50,14 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.core",
     "apps.onboarding",
+    "apps.bibel",
+    "apps.chat",
+    "apps.notification",
+    "apps.subscription",
+    "apps.checkin",
+    "apps.homepage",
+    
+
 ]
 
 MIDDLEWARE = [
@@ -123,8 +131,7 @@ APPLE_CALLBACK_URL = env("APPLE_CALLBACK_URL", default="")
 
 # REST Framework settings
 REST_FRAMEWORK = {
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-    
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
@@ -132,9 +139,9 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle",
         "rest_framework.throttling.AnonRateThrottle",
     ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '20/minute',
-        'user': '1000/day',
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "20/minute",
+        "user": "1000/day",
     },
 }
 
@@ -151,8 +158,13 @@ ACCOUNT_SIGNUP_FIELDS = ["email"]
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 8},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]

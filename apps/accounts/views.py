@@ -32,10 +32,8 @@ from .serializers import (
     CompleteRegistrationSerializer,
     SocialAuthSerializer,
     LoginSerializer,
-    VerifyEmailChangeSerializer, 
-    ResendEmailChangeOTPSerializer
-    
-
+    VerifyEmailChangeSerializer,
+    ResendEmailChangeOTPSerializer,
 )
 from apps.accounts.utils.send_otp_email import send_otp_email
 from django.conf import settings
@@ -44,75 +42,68 @@ from apps.core.utils.mixins import BaseResponseMixin
 
 User = get_user_model()
 
+
 class InitiateRegistrationView(BaseResponseMixin, generics.GenericAPIView):
     serializer_class = InitiateRegistrationSerializer
     permission_classes = (permissions.AllowAny,)
     throttle_classes = [AnonRateThrottle]
-    
+
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
-        
+
         if not serializer.is_valid():
             # Handle basic validation errors (like invalid email format)
             return self.success_response(
-                data={
-                    "email": request.data.get("email", ""),
-                    "is_sent": False
-                },
+                data={"email": request.data.get("email", ""), "is_sent": False},
                 message="Invalid email format.",
-                status_code=status.HTTP_200_OK
+                status_code=status.HTTP_200_OK,
             )
-        
+
         email = serializer.validated_data["email"]
         user, message = serializer.send_registration_otp(email)
-        
+
         if user is None:
             # User already exists
             return self.success_response(
-                data={
-                    "email": email,
-                    "is_sent": False
-                },
+                data={"email": email, "is_sent": False},
                 message=message,
-                status_code=status.HTTP_200_OK
+                status_code=status.HTTP_200_OK,
             )
-        
+
         # Success case
         return self.success_response(
-            data={
-                "email": email,
-                "user_id": user.id,
-                "is_sent": True
-            },
+            data={"email": email, "user_id": user.id, "is_sent": True},
             message=message,
-            status_code=status.HTTP_200_OK
+            status_code=status.HTTP_200_OK,
         )
-    
+
+
 class CompleteRegistrationView(BaseResponseMixin, generics.GenericAPIView):
     serializer_class = CompleteRegistrationSerializer
     permission_classes = (permissions.AllowAny,)
     throttle_classes = [AnonRateThrottle]
-    
+
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         user = serializer.save()
-        
+
         # Generate tokens
         refresh = RefreshToken.for_user(user)
-        
+
         return self.success_response(
             data={
                 "refresh": str(refresh),
                 "access": str(refresh.access_token),
                 "user": {
                     "email": user.email,
-                }
+                },
             },
             message="Registration completed successfully. You are now logged in.",
-            status_code=status.HTTP_201_CREATED
+            status_code=status.HTTP_201_CREATED,
         )
+
 
 class RegisterView(BaseResponseMixin, generics.CreateAPIView):
     queryset = User.objects.all()
@@ -128,7 +119,7 @@ class RegisterView(BaseResponseMixin, generics.CreateAPIView):
         return self.success_response(
             data={"email": user.email},
             message="Registration successful. Please check your email for verification code.",
-            status_code=status.HTTP_201_CREATED
+            status_code=status.HTTP_201_CREATED,
         )
 
 
@@ -166,11 +157,8 @@ class ResendOTPView(BaseResponseMixin, generics.GenericAPIView):
 
         serializer.send_otp()
 
-        return self.success_response(
-            message="OTP has been sent to your email"
-        )
+        return self.success_response(message="OTP has been sent to your email")
 
-  
 
 class LoginView(BaseResponseMixin, generics.GenericAPIView):
     serializer_class = LoginSerializer
@@ -180,7 +168,7 @@ class LoginView(BaseResponseMixin, generics.GenericAPIView):
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         email = serializer.validated_data.get("email")
         password = serializer.validated_data.get("password")
 
@@ -190,7 +178,7 @@ class LoginView(BaseResponseMixin, generics.GenericAPIView):
             if not user.is_active:
                 return self.error_response(
                     message="Please verify your email before logging in",
-                    status_code=status.HTTP_401_UNAUTHORIZED
+                    status_code=status.HTTP_401_UNAUTHORIZED,
                 )
 
             refresh = RefreshToken.for_user(user)
@@ -200,16 +188,17 @@ class LoginView(BaseResponseMixin, generics.GenericAPIView):
                     "access": str(refresh.access_token),
                     "user": {
                         "email": user.email,
-                    }
+                    },
                 },
-                message="Login successful"
+                message="Login successful",
             )
         else:
             return self.error_response(
                 message="Invalid email or password",
-                status_code=status.HTTP_401_UNAUTHORIZED
+                status_code=status.HTTP_401_UNAUTHORIZED,
             )
-        
+
+
 class LogoutView(BaseResponseMixin, generics.GenericAPIView):
     permission_classes = (permissions.IsAuthenticated,)
     throttle_classes = [UserRateThrottle]
@@ -220,21 +209,21 @@ class LogoutView(BaseResponseMixin, generics.GenericAPIView):
             if not refresh_token:
                 return self.error_response(
                     message="Refresh token is required",
-                    status_code=status.HTTP_400_BAD_REQUEST
+                    status_code=status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             token = RefreshToken(refresh_token)
             token.blacklist()
-            
+
             return self.success_response(
-                message="Logged out successfully",
-                status_code=status.HTTP_200_OK
+                message="Logged out successfully", status_code=status.HTTP_200_OK
             )
         except Exception as e:
             return self.error_response(
                 message="Invalid or expired refresh token",
-                status_code=status.HTTP_400_BAD_REQUEST
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
+
 
 class PasswordResetRequestView(BaseResponseMixin, generics.GenericAPIView):
     serializer_class = PasswordResetRequestSerializer
@@ -252,6 +241,7 @@ class PasswordResetRequestView(BaseResponseMixin, generics.GenericAPIView):
             message="If the email exists, a password reset OTP has been sent",
             status_code=status.HTTP_200_OK,
         )
+
 
 class PasswordResetOTPVerifyView(BaseResponseMixin, generics.GenericAPIView):
     serializer_class = PasswordResetOTPVerifySerializer
@@ -283,6 +273,7 @@ class PasswordResetConfirmView(BaseResponseMixin, generics.GenericAPIView):
             status_code=status.HTTP_200_OK,
         )
 
+
 class ChangePasswordView(BaseResponseMixin, generics.GenericAPIView):
     serializer_class = ChangePasswordSerializer
     permission_classes = (permissions.IsAuthenticated,)
@@ -299,15 +290,13 @@ class ChangePasswordView(BaseResponseMixin, generics.GenericAPIView):
         if not check_password(old_password, user.password):
             return self.error_response(
                 message="Current password is incorrect",
-                status_code=status.HTTP_400_BAD_REQUEST
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
 
         user.set_password(new_password)
         user.save()
 
-        return self.success_response(
-            message="Password changed successfully"
-        )
+        return self.success_response(message="Password changed successfully")
 
 
 class GoogleLogin(SocialLoginView):
@@ -322,7 +311,6 @@ class AppleLogin(SocialLoginView):
     callback_url = settings.APPLE_CALLBACK_URL
 
 
-
 class AccountSoftDeleteView(BaseResponseMixin, APIView):
     permission_classes = (permissions.IsAuthenticated,)
     throttle_classes = [UserRateThrottle]
@@ -330,13 +318,14 @@ class AccountSoftDeleteView(BaseResponseMixin, APIView):
     def post(self, request):
         serializer = AccountSoftDeleteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         user = request.user
         user.soft_delete()
-        
+
         return self.success_response(
             message="Account has been deactivated successfully"
         )
+
 
 class AccountRestoreView(BaseResponseMixin, APIView):
     permission_classes = (permissions.IsAdminUser,)
@@ -347,15 +336,14 @@ class AccountRestoreView(BaseResponseMixin, APIView):
             return self.error_response(
                 message="Invalid data provided",
                 errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
 
         user = serializer.user
         user.restore()
 
         return self.success_response(
-            data={"email": user.email},
-            message="Account restored successfully"
+            data={"email": user.email}, message="Account restored successfully"
         )
 
 
@@ -378,277 +366,270 @@ class SocialAuthView(BaseResponseMixin, generics.GenericAPIView):
     serializer_class = SocialAuthSerializer
     permission_classes = (permissions.AllowAny,)
     throttle_classes = [AnonRateThrottle]
-    
+
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         user = serializer.create_or_login_user()
-        
+
         # Generate tokens
         refresh = RefreshToken.for_user(user)
-        
+
         return self.success_response(
             data={
                 "refresh": str(refresh),
                 "access": str(refresh.access_token),
                 "user": {
                     "email": user.email,
-                    "name": user.profile.name if hasattr(user, 'profile') else '',
+                    "name": user.profile.name if hasattr(user, "profile") else "",
                     "social_auth_provider": user.social_auth_provider,  # Include provider info
-                }
+                },
             },
             message="Login successful",
-            status_code=status.HTTP_200_OK
+            status_code=status.HTTP_200_OK,
         )
-    
+
 
 class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
     serializer_class = ProfileUpdateSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-    
+
     def get_object(self):
         profile, created = UserProfile.objects.get_or_create(user=self.request.user)
         return profile
-    
+
     def get(self, request):
         """Get current profile data"""
         try:
             profile = self.get_object()
             serializer = self.get_serializer(profile)
-            
+
             # Include current user email in response
             data = serializer.data
-            data['email'] = request.user.email
-            
+            data["email"] = request.user.email
+
             return self.success_response(
-                data=data,
-                message="Profile retrieved successfully"
+                data=data, message="Profile retrieved successfully"
             )
-            
+
         except Exception as e:
             return self.handle_exception(e)
-    
+
     def put(self, request):
         """Update profile - full update"""
         try:
             profile = self.get_object()
             serializer = self.get_serializer(profile, data=request.data, partial=False)
-            
+
             if serializer.is_valid():
                 updated_profile = serializer.save()
-                
+
                 # Check if email change was requested
-                if 'email' in request.data and request.data['email'] != request.user.email:
+                if (
+                    "email" in request.data
+                    and request.data["email"] != request.user.email
+                ):
                     return self.success_response(
                         data={
-                            'profile': self.get_serializer(updated_profile).data,
-                            'email_change_pending': True,
-                            'temp_email': updated_profile.temp_email,
-                            'current_email': request.user.email
+                            "profile": self.get_serializer(updated_profile).data,
+                            "email_change_pending": True,
+                            "temp_email": updated_profile.temp_email,
+                            "current_email": request.user.email,
                         },
                         message="Profile updated. Please verify your new email address.",
-                        action_required="EMAIL_VERIFICATION"
+                        action_required="EMAIL_VERIFICATION",
                     )
-                
+
                 # Regular profile update
                 response_data = self.get_serializer(updated_profile).data
-                response_data['email'] = request.user.email
-                
+                response_data["email"] = request.user.email
+
                 return self.success_response(
-                    data=response_data,
-                    message="Profile updated successfully"
+                    data=response_data, message="Profile updated successfully"
                 )
-            
+
             return self.error_response(
                 message="Validation failed",
                 error_code="VALIDATION_ERROR",
                 errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
-            
+
         except Exception as e:
             return self.handle_exception(e)
-    
+
     def patch(self, request):
         """Update profile - partial update"""
         try:
             profile = self.get_object()
             serializer = self.get_serializer(profile, data=request.data, partial=True)
-            
+
             if serializer.is_valid():
                 updated_profile = serializer.save()
-                
+
                 # Check if email change was requested
-                if 'email' in request.data and request.data['email'] != request.user.email:
+                if (
+                    "email" in request.data
+                    and request.data["email"] != request.user.email
+                ):
                     return self.success_response(
                         data={
-                            'profile': self.get_serializer(updated_profile).data,
-                            'email_change_pending': True,
-                            'temp_email': updated_profile.temp_email,
-                            'current_email': request.user.email
+                            "profile": self.get_serializer(updated_profile).data,
+                            "email_change_pending": True,
+                            "temp_email": updated_profile.temp_email,
+                            "current_email": request.user.email,
                         },
                         message="Profile updated. Please verify your new email address.",
-                        action_required="EMAIL_VERIFICATION"
+                        action_required="EMAIL_VERIFICATION",
                     )
-                
+
                 # Regular profile update
                 response_data = self.get_serializer(updated_profile).data
-                response_data['email'] = request.user.email
-                
+                response_data["email"] = request.user.email
+
                 return self.success_response(
-                    data=response_data,
-                    message="Profile updated successfully"
+                    data=response_data, message="Profile updated successfully"
                 )
-            
+
             return self.error_response(
                 message="Validation failed",
                 error_code="VALIDATION_ERROR",
                 errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
-            
+
         except Exception as e:
             return self.handle_exception(e)
+
 
 class VerifyEmailChangeView(BaseResponseMixin, generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = VerifyEmailChangeSerializer
-    
+
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
-        otp_code = serializer.validated_data['otp']
+
+        otp_code = serializer.validated_data["otp"]
 
         try:
             try:
                 otp = OTP.objects.get(
                     user=request.user,
                     otp=otp_code,
-                    purpose='email_change',
-                    is_used=False
+                    purpose="email_change",
+                    is_used=False,
                 )
-                
+
                 if not otp.is_valid():
                     return self.bad_request_response(
-                        message="OTP is invalid or expired",
-                        error_code="INVALID_OTP"
+                        message="OTP is invalid or expired", error_code="INVALID_OTP"
                     )
-                
+
                 # Get profile and update email
                 profile = request.user.profile
                 if not profile.temp_email:
                     return self.bad_request_response(
                         message="No pending email change found",
-                        error_code="NO_PENDING_EMAIL_CHANGE"
+                        error_code="NO_PENDING_EMAIL_CHANGE",
                     )
-                
+
                 old_email = request.user.email
                 new_email = profile.temp_email
-                
+
                 # Update user email
                 request.user.email = new_email
                 request.user.save()
-                
+
                 # Clear temp email
                 profile.temp_email = None
                 profile.save()
-                
+
                 # Mark OTP as used
                 otp.is_used = True
                 otp.save()
-                
+
                 return self.success_response(
                     data={
-                        'old_email': old_email,
-                        'new_email': new_email,
-                        'email_changed': True
+                        "old_email": old_email,
+                        "new_email": new_email,
+                        "email_changed": True,
                     },
-                    message="Email changed successfully"
+                    message="Email changed successfully",
                 )
-                
+
             except OTP.DoesNotExist:
                 return self.bad_request_response(
-                    message="Invalid OTP",
-                    error_code="INVALID_OTP"
+                    message="Invalid OTP", error_code="INVALID_OTP"
                 )
-                
+
         except Exception as e:
             return self.handle_exception(e)
-        
+
 
 class ResendEmailChangeOTPView(BaseResponseMixin, generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ResendEmailChangeOTPSerializer
-    
+
     def post(self, request):
         try:
             profile = request.user.profile
-            
+
             if not profile.temp_email:
                 return self.bad_request_response(
                     message="No pending email change found",
-                    error_code="NO_PENDING_EMAIL_CHANGE"
+                    error_code="NO_PENDING_EMAIL_CHANGE",
                 )
-            
+
             # Invalidate old OTPs
             OTP.objects.filter(
-                user=request.user,
-                purpose='email_change',
-                is_used=False
+                user=request.user, purpose="email_change", is_used=False
             ).update(is_used=True)
-            
+
             # Generate new OTP
             otp_code = str(random.randint(1000, 9999))
             OTP.objects.create(
                 user=request.user,
                 otp=otp_code,
-                purpose='email_change',
-                expires_at=timezone.now() + timedelta(minutes=10)
+                purpose="email_change",
+                expires_at=timezone.now() + timedelta(minutes=10),
             )
 
-            send_otp_email(profile.user, otp_code, 'email change')
-                        
+            send_otp_email(profile.user, otp_code, "email change")
+
             return self.success_response(
-                data={
-                    'temp_email': profile.temp_email,
-                    'otp_sent': True
-                },
-                message="OTP sent to your new email address"
+                data={"temp_email": profile.temp_email, "otp_sent": True},
+                message="OTP sent to your new email address",
             )
-            
+
         except Exception as e:
             return self.handle_exception(e)
 
 
 class CancelEmailChangeView(BaseResponseMixin, generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request):
         try:
             profile = request.user.profile
-            
+
             if not profile.temp_email:
                 return self.bad_request_response(
                     message="No pending email change found",
                 )
-            
+
             # Clear temp email
             profile.temp_email = None
             profile.save()
-            
+
             # Invalidate OTPs
             OTP.objects.filter(
-                user=request.user,
-                purpose='email_change',
-                is_used=False
+                user=request.user, purpose="email_change", is_used=False
             ).update(is_used=True)
-            
-            return self.success_response(
-                message="Email change cancelled successfully"
-            )
-            
+
+            return self.success_response(message="Email change cancelled successfully")
+
         except Exception as e:
             return self.handle_exception(e)

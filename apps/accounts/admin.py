@@ -7,10 +7,13 @@ User = get_user_model()
 
 class CustomUserAdmin(admin.ModelAdmin):
     list_display = ("email", "is_deleted", "is_active", "is_staff")
-    list_filter = ("is_staff", "is_superuser", )
+    list_filter = (
+        "is_staff",
+        "is_superuser",
+    )
     fieldsets = (
         (None, {"fields": ("email", "password")}),
-        ("Personal info", {"fields": ("username", )}),
+        ("Personal info", {"fields": ("username",)}),
         (
             "Permissions",
             {"fields": ("is_deleted", "is_active", "is_staff", "is_superuser")},
