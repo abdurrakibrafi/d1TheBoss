@@ -12,6 +12,8 @@ urlpatterns = [
     path('tone-preference/', views.TonePreferenceView.as_view(), name='tone-preference'),
     path('bible-familiarity/', views.BibleFamiliarityView.as_view(), name='bible-familiarity'),
     path('bible-version/', views.BibleVersionView.as_view(), name='bible-version'),
+    path('user-data/', views.UserOnboardingDataView.as_view(), name='user-onboarding-data'),
+
     
     # Progress tracking
     path('progress/', views.OnboardingProgressView.as_view(), name='onboarding-progress'),

@@ -1,4 +1,4 @@
-from rest_framework import generics, status
+from rest_framework import generics, status, permissions
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -37,6 +37,18 @@ from apps.onboarding.models import (
     BibleVersionOption,
     BibleVersion
 )
+from rest_framework import generics, permissions, status
+from rest_framework.parsers import JSONParser
+from .models import (
+    JourneyReason, Denomination, FaithGoal, TonePreference,
+    BibleFamiliarity, BibleVersion
+)
+from .serializers import (
+    JourneyReasonSerializer, DenominationSerializer, FaithGoalSerializer,
+    TonePreferenceSerializer, BibleFamiliaritySerializer, BibleVersionSerializer
+)
+from django.db import transaction
+
 
 class OnboardingOptionsView(BaseResponseMixin, generics.GenericAPIView):
     """Get all onboarding options in one call"""
@@ -372,3 +384,107 @@ class CompleteOnboardingView(BaseResponseMixin, generics.GenericAPIView):
         except Exception as exc:
             return self.handle_exception(exc)
 
+
+class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [JSONParser]
+
+    def get(self, request):
+        user = request.user
+        data = {
+            "journey_reason": JourneyReasonSerializer(
+                JourneyReason.objects.filter(user=user).first()
+            ).data if JourneyReason.objects.filter(user=user).exists() else None,
+            "denomination": DenominationSerializer(
+                Denomination.objects.filter(user=user).first()
+            ).data if Denomination.objects.filter(user=user).exists() else None,
+            "faith_goal": FaithGoalSerializer(
+                FaithGoal.objects.filter(user=user).first()
+            ).data if FaithGoal.objects.filter(user=user).exists() else None,
+            "tone_preference": TonePreferenceSerializer(
+                TonePreference.objects.filter(user=user).first()
+            ).data if TonePreference.objects.filter(user=user).exists() else None,
+            "bible_familiarity": BibleFamiliaritySerializer(
+                BibleFamiliarity.objects.filter(user=user).first()
+            ).data if BibleFamiliarity.objects.filter(user=user).exists() else None,
+            "bible_version": BibleVersionSerializer(
+                BibleVersion.objects.filter(user=user).first()
+            ).data if BibleVersion.objects.filter(user=user).exists() else None,
+        }
+        return self.success_response(
+            data=data,
+            message="User onboarding data fetched successfully."
+        )
+
+    @transaction.atomic
+    def patch(self, request):
+        user = request.user
+        updated = {}
+        errors = {}
+
+        # Update each section if present in request.data
+        if "journey_reason" in request.data:
+            instance = JourneyReason.objects.filter(user=user).first()
+            serializer = JourneyReasonSerializer(instance, data=request.data["journey_reason"], partial=True)
+            if serializer.is_valid():
+                serializer.save(user=user)
+                updated["journey_reason"] = serializer.data
+            else:
+                errors["journey_reason"] = serializer.errors
+
+        if "denomination" in request.data:
+            instance = Denomination.objects.filter(user=user).first()
+            serializer = DenominationSerializer(instance, data=request.data["denomination"], partial=True)
+            if serializer.is_valid():
+                serializer.save(user=user)
+                updated["denomination"] = serializer.data
+            else:
+                errors["denomination"] = serializer.errors
+
+        if "faith_goal" in request.data:
+            instance = FaithGoal.objects.filter(user=user).first()
+            serializer = FaithGoalSerializer(instance, data=request.data["faith_goal"], partial=True)
+            if serializer.is_valid():
+                serializer.save(user=user)
+                updated["faith_goal"] = serializer.data
+            else:
+                errors["faith_goal"] = serializer.errors
+
+        if "tone_preference" in request.data:
+            instance = TonePreference.objects.filter(user=user).first()
+            serializer = TonePreferenceSerializer(instance, data=request.data["tone_preference"], partial=True)
+            if serializer.is_valid():
+                serializer.save(user=user)
+                updated["tone_preference"] = serializer.data
+            else:
+                errors["tone_preference"] = serializer.errors
+
+        if "bible_familiarity" in request.data:
+            instance = BibleFamiliarity.objects.filter(user=user).first()
+            serializer = BibleFamiliaritySerializer(instance, data=request.data["bible_familiarity"], partial=True)
+            if serializer.is_valid():
+                serializer.save(user=user)
+                updated["bible_familiarity"] = serializer.data
+            else:
+                errors["bible_familiarity"] = serializer.errors
+
+        if "bible_version" in request.data:
+            instance = BibleVersion.objects.filter(user=user).first()
+            serializer = BibleVersionSerializer(instance, data=request.data["bible_version"], partial=True)
+            if serializer.is_valid():
+                serializer.save(user=user)
+                updated["bible_version"] = serializer.data
+            else:
+                errors["bible_version"] = serializer.errors
+
+        if errors:
+            return self.error_response(
+                message="Some fields failed to update.",
+                errors=errors,
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        return self.success_response(
+            data=updated,
+            message="User onboarding data updated successfully."
+        )

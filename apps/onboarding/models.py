@@ -70,7 +70,6 @@ class FaithGoalQuestion(models.Model):
         ordering = ["created_at"]
         verbose_name_plural = "05. Faith Goal Questions"
 
-    
 class FaithGoalOption(models.Model):
     faith_goal_question = models.ForeignKey(FaithGoalQuestion, on_delete=models.CASCADE, blank=True, null=True)
     option = models.CharField(max_length=250, blank=True, null=True)
