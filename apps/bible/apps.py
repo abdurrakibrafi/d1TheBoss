@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class BibelConfig(AppConfig):
+class BibleConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "apps.bibel"
+    name = "apps.bible"

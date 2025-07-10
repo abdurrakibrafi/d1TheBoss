@@ -50,7 +50,7 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.core",
     "apps.onboarding",
-    "apps.bibel",
+    "apps.bible",
     "apps.chat",
     "apps.notification",
     "apps.subscription",
