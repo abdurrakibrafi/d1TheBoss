@@ -7,9 +7,10 @@ from django.shortcuts import get_object_or_404
 from .models import ReadingProgress, Bookmark, SearchHistory
 from .serializers import ReadingProgressSerializer, BookmarkSerializer, SearchHistorySerializer
 from .services.bible_api_service import BibleAPIService
+from apps.core.utils.mixins import BaseResponseMixin
 
 
-class BibleVersionListView(APIView):
+class BibleVersionListView(BaseResponseMixin, APIView):
     """GET /api/bible-versions/ - List all Bible versions with user's preference marked"""
     permission_classes = [IsAuthenticated]
     
@@ -24,11 +25,14 @@ class BibleVersionListView(APIView):
         for version in versions:
             version['is_default'] = version['id'] == user_preferred_id
             version['is_user_preferred'] = version['id'] == user_preferred_id
-        
-        return Response({
+
+        return self.success_response(
+            {
             'versions': versions,
             'user_preferred_id': user_preferred_id
-        })
+        }
+        )
+        
     
     def get_user_preferred_bible_id(self, user):
         """Get user's preferred Bible version ID"""
