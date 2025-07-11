@@ -535,7 +535,7 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
                 expires_at=timezone.now() + timedelta(minutes=10),
             )
 
-            send_otp_email(user, otp_code, "email_change")
+            send_otp_email(user, otp_code, "email_change", to_email=instance.temp_email)
 
         # Update other profile fields
         for attr, value in validated_data.items():

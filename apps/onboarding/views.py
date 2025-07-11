@@ -281,7 +281,8 @@ class BibleVersionView(BaseResponseMixin, generics.GenericAPIView):
             if version:
                 serializer = self.serializer_class(version)
                 return self.success_response(
-                    data=serializer.data, message="Bible version retrieved successfully"
+                    data=serializer.data, 
+                    message="Bible version retrieved successfully"
                 )
             return self.success_response(
                 data=None, message="No bible version found for user"

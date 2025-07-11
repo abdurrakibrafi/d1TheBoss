@@ -66,7 +66,7 @@ class BibleFamiliarityOptionSerializer(serializers.ModelSerializer):
 class BibleVersionOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = BibleVersionOption
-        fields = ["id", "title", "subtitle", "is_active"]
+        fields = ["id", "title", "subtitle", "api_bible_id", "is_active"]
 
 
 # =============================================

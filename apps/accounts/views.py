@@ -580,7 +580,6 @@ class ResendEmailChangeOTPView(BaseResponseMixin, generics.GenericAPIView):
             if not profile.temp_email:
                 return self.bad_request_response(
                     message="No pending email change found",
-                    error_code="NO_PENDING_EMAIL_CHANGE",
                 )
 
             # Invalidate old OTPs
@@ -597,7 +596,8 @@ class ResendEmailChangeOTPView(BaseResponseMixin, generics.GenericAPIView):
                 expires_at=timezone.now() + timedelta(minutes=10),
             )
 
-            send_otp_email(profile.user, otp_code, "email change")
+            send_otp_email(profile.user, otp_code, "email_change", to_email=profile.temp_email)
+
 
             return self.success_response(
                 data={"temp_email": profile.temp_email, "otp_sent": True},

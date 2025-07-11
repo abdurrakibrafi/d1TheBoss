@@ -199,6 +199,9 @@ class BibleFamiliarity(models.Model):
 class BibleVersionOption(models.Model):
     title = models.CharField(max_length=250, blank=True, null=True)
     subtitle = models.CharField(max_length=250, blank=True, null=True)
+
+    api_bible_id = models.CharField(max_length=50, unique=True, blank=True, null=True) 
+    
     is_active = models.BooleanField(default=True)
 
     created_at = models.DateTimeField(auto_now_add=True)

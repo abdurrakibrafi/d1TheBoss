@@ -1,114 +1,301 @@
-from django.shortcuts import render
-
-# Create your views here.
-# views.py
+# Updated views.py
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
-from apps.accounts.models import User
-from .models import *
-from .serializers import *
+from .models import ReadingProgress, Bookmark, SearchHistory
+from .serializers import ReadingProgressSerializer, BookmarkSerializer, SearchHistorySerializer
+from .services.bible_api_service import BibleAPIService
 
 
-# Bible Version Views
-class BibleVersionCacheListView(APIView):
-    """GET /api/bible-versions/ - List all available Bible versions"""
+class BibleVersionListView(APIView):
+    """GET /api/bible-versions/ - List all Bible versions with user's preference marked"""
+    permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        versions = BibleVersionCache.objects.filter(is_active=True)
-        serializer = BibleVersionCacheListSerializer(versions, many=True)
-        return Response(serializer.data)
-
-
-class BibleVersionCacheDetailView(APIView):
-    """GET /api/bible-versions/{id}/ - Get specific Bible version details"""
+        service = BibleAPIService()
+        versions = service.get_bible_versions()
+        
+        # Get user's preferred Bible version
+        user_preferred_id = self.get_user_preferred_bible_id(request.user)
+        
+        # Mark user's preferred version
+        for version in versions:
+            version['is_default'] = version['id'] == user_preferred_id
+            version['is_user_preferred'] = version['id'] == user_preferred_id
+        
+        return Response({
+            'versions': versions,
+            'user_preferred_id': user_preferred_id
+        })
     
-    def get(self, request, pk):
-        version = get_object_or_404(BibleVersionCache, pk=pk)
-        serializer = BibleVersionCacheSerializer(version)
-        return Response(serializer.data)
+    def get_user_preferred_bible_id(self, user):
+        """Get user's preferred Bible version ID"""
+        try:
+            from apps.onboarding.models import BibleVersion
+            user_bible_version = BibleVersion.objects.filter(user=user).first()
+            if user_bible_version and user_bible_version.bible_version_option:
+                return user_bible_version.bible_version_option.api_bible_id
+        except ImportError:
+            pass
+        
+        # Fallback to reading progress bible version
+        try:
+            progress = ReadingProgress.objects.get(user=user)
+            return progress.bible_version_id
+        except ReadingProgress.DoesNotExist:
+            pass
+        
+        # Final fallback
+        return '06125adad2d5898a-01'  # NIV
 
 
-# Book Views
+class UserPreferredBibleView(APIView):
+    """GET/PUT /api/user-preferred-bible/ - Get/Update user's preferred Bible version"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            from apps.onboarding.models import BibleVersion
+            user_bible_version = BibleVersion.objects.get(user=request.user)
+            bible_version_option = user_bible_version.bible_version_option
+            
+            # Get Bible details from API.Bible
+            service = BibleAPIService()
+            api_bible_id = bible_version_option.api_bible_id
+            bible_details = service.get_bible_details(api_bible_id)
+            
+            return Response({
+                'preferred_version': {
+                    'id': api_bible_id,
+                    'title': bible_version_option.title,
+                    'subtitle': bible_version_option.subtitle,
+                    'details': bible_details
+                }
+            })
+        except (ImportError, AttributeError):
+            # Fallback to reading progress
+            try:
+                progress = ReadingProgress.objects.get(user=request.user)
+                service = BibleAPIService()
+                bible_details = service.get_bible_details(progress.bible_version_id)
+                
+                return Response({
+                    'preferred_version': {
+                        'id': progress.bible_version_id,
+                        'title': 'User Selected Version',
+                        'subtitle': '',
+                        'details': bible_details
+                    }
+                })
+            except ReadingProgress.DoesNotExist:
+                pass
+        except Exception as e:
+            pass
+        
+        # Final fallback
+        return Response({
+            'preferred_version': {
+                'id': '06125adad2d5898a-01',
+                'title': 'New International Version',
+                'subtitle': 'NIV',
+                'details': {}
+            }
+        })
+    
+    def put(self, request):
+        """Update user's preferred Bible version"""
+        bible_version_id = request.data.get('bible_version_id')
+        
+        if not bible_version_id:
+            return Response({'error': 'bible_version_id is required'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from apps.onboarding.models import BibleVersion, BibleVersionOption
+            
+            # Get the Bible version option
+            bible_version_option = BibleVersionOption.objects.get(api_bible_id=bible_version_id)
+            
+            # Update or create user's Bible version preference
+            user_bible_version, created = BibleVersion.objects.get_or_create(
+                user=request.user,
+                defaults={'bible_version_option': bible_version_option}
+            )
+            
+            if not created:
+                user_bible_version.bible_version_option = bible_version_option
+                user_bible_version.save()
+            
+            # Also update reading progress to use new version
+            progress, created = ReadingProgress.objects.get_or_create(
+                user=request.user,
+                defaults={'bible_version_id': bible_version_id}
+            )
+            
+            if not created:
+                progress.bible_version_id = bible_version_id
+                progress.save()
+            
+            return Response({
+                'message': 'Preferred Bible version updated successfully',
+                'bible_version_id': bible_version_id
+            })
+            
+        except ImportError:
+            # Fallback: just update reading progress
+            progress, created = ReadingProgress.objects.get_or_create(
+                user=request.user,
+                defaults={'bible_version_id': bible_version_id}
+            )
+            
+            if not created:
+                progress.bible_version_id = bible_version_id
+                progress.save()
+            
+            return Response({
+                'message': 'Bible version preference updated',
+                'bible_version_id': bible_version_id
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
 class BookListView(APIView):
-    """GET /api/bible-versions/{bible_id}/books/ - List books for a Bible version"""
-    
+    """GET /api/bibles/{bible_id}/books/ - List books for a Bible version"""
     def get(self, request, bible_id):
-        bible_version = get_object_or_404(BibleVersionCache, pk=bible_id)
-        books = Book.objects.filter(bible_version=bible_version)
-        serializer = BookListSerializer(books, many=True)
-        return Response(serializer.data)
+        service = BibleAPIService()
+        books = service.get_books(bible_id)
+        
+        if isinstance(books, dict) and 'error' in books:
+            return Response(books, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({
+            'bible_id': bible_id,
+            'books': books
+        })
 
 
-class BookDetailView(APIView):
-    """GET /api/books/{id}/ - Get book details with chapters"""
-    
-    def get(self, request, pk):
-        book = get_object_or_404(Book, pk=pk)
-        serializer = BookWithChaptersSerializer(book)
-        return Response(serializer.data)
-
-
-# Chapter Views
 class ChapterListView(APIView):
-    """GET /api/books/{book_id}/chapters/ - List chapters for a book"""
-    
-    def get(self, request, book_id):
-        book = get_object_or_404(Book, pk=book_id)
-        chapters = Chapter.objects.filter(book=book)
-        serializer = ChapterListSerializer(chapters, many=True)
-        return Response(serializer.data)
+    """GET /api/bibles/{bible_id}/books/{book_id}/chapters/ - List chapters"""
+    def get(self, request, bible_id, book_id):
+        service = BibleAPIService()
+        chapters = service.get_chapters(bible_id, book_id)
+        
+        if isinstance(chapters, dict) and 'error' in chapters:
+            return Response(chapters, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({
+            'bible_id': bible_id,
+            'book_id': book_id,
+            'chapters': chapters
+        })
 
 
-class ChapterDetailView(APIView):
-    """GET /api/chapters/{id}/ - Get chapter with all verses"""
-    
-    def get(self, request, pk):
-        chapter = get_object_or_404(Chapter, pk=pk)
-        serializer = ChapterWithVersesSerializer(chapter)
-        return Response(serializer.data)
+class ChapterContentView(APIView):
+    """GET /api/bibles/{bible_id}/chapters/{chapter_id}/ - Get chapter content"""
+    def get(self, request, bible_id, chapter_id):
+        service = BibleAPIService()
+        content = service.get_chapter_content(bible_id, chapter_id)
+        
+        if isinstance(content, dict) and 'error' in content:
+            return Response(content, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Add Bible version info to response
+        bible_details = service.get_bible_details(bible_id)
+        
+        # Get navigation info
+        nav_info = service.get_chapter_navigation(bible_id, chapter_id)
+        
+        return Response({
+            'bible_id': bible_id,
+            'bible_info': bible_details,
+            'chapter': content,
+            'navigation': nav_info  # Added navigation info
+        })
 
-
-# Verse Views
-class VerseDetailView(APIView):
-    """GET /api/verses/{id}/ - Get specific verse"""
-    
-    def get(self, request, pk):
-        verse = get_object_or_404(Verse, pk=pk)
-        serializer = VerseSerializer(verse)
-        return Response(serializer.data)
-
-
-# Reading Progress Views
-class ReadingProgressView(APIView):
-    """GET/PUT /api/reading-progress/{bible_id}/ - Reading progress management"""
+class SearchView(APIView):
+    """GET /api/bibles/{bible_id}/search/?query=text - Search verses"""
     permission_classes = [IsAuthenticated]
     
     def get(self, request, bible_id):
-        bible_version = get_object_or_404(BibleVersionCache, pk=bible_id)
-        progress, created = ReadingProgress.objects.get_or_create(
-            user=request.user, 
-            bible_version=bible_version
+        query = request.query_params.get('query')
+        if not query:
+            return Response({'error': 'Query parameter required'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        limit = request.query_params.get('limit', 10)
+        try:
+            limit = int(limit)
+        except ValueError:
+            limit = 10
+        
+        service = BibleAPIService()
+        results = service.search_verses(bible_id, query, limit)
+        
+        if isinstance(results, dict) and 'error' in results:
+            return Response(results, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Save search history
+        SearchHistory.objects.create(
+            user=request.user,
+            query=query,
+            bible_version_id=bible_id
         )
+        
+        return Response({
+            'bible_id': bible_id,
+            'search_results': results
+        })
+
+
+class ReadingProgressView(APIView):
+    """GET/PUT /api/reading-progress/ - User's reading progress"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        # Get user's preferred Bible version
+        preferred_bible_id = self.get_user_preferred_bible_id(request.user)
+        
+        progress, created = ReadingProgress.objects.get_or_create(
+            user=request.user,
+            defaults={'bible_version_id': preferred_bible_id}
+        )
+        
         serializer = ReadingProgressSerializer(progress)
         return Response(serializer.data)
     
-    def put(self, request, bible_id):
-        bible_version = get_object_or_404(BibleVersionCache, pk=bible_id)
-        progress, created = ReadingProgress.objects.get_or_create(
-            user=request.user, 
-            bible_version=bible_version
-        )
-        serializer = UpdateReadingProgressSerializer(progress, data=request.data, partial=True)
+    def put(self, request):
+        """Update reading progress"""
+        try:
+            progress = ReadingProgress.objects.get(user=request.user)
+        except ReadingProgress.DoesNotExist:
+            preferred_bible_id = self.get_user_preferred_bible_id(request.user)
+            progress = ReadingProgress.objects.create(
+                user=request.user,
+                bible_version_id=preferred_bible_id
+            )
+        
+        serializer = ReadingProgressSerializer(progress, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
-            return Response(ReadingProgressSerializer(progress).data)
+            return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def get_user_preferred_bible_id(self, user):
+        """Get user's preferred Bible version ID"""
+        try:
+            from apps.onboarding.models import BibleVersion
+            user_bible_version = BibleVersion.objects.filter(user=user).first()
+            if user_bible_version and user_bible_version.bible_version_option:
+                return user_bible_version.bible_version_option.api_bible_id
+        except ImportError:
+            pass
+        
+        return '06125adad2d5898a-01'  # Default to NIV
 
 
-# Bookmark Views
 class BookmarkListView(APIView):
     """GET/POST /api/bookmarks/ - User bookmarks"""
     permission_classes = [IsAuthenticated]
@@ -119,16 +306,15 @@ class BookmarkListView(APIView):
         return Response(serializer.data)
     
     def post(self, request):
-        serializer = CreateBookmarkSerializer(data=request.data, context={'request': request})
+        serializer = BookmarkSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(user=request.user)
-            bookmark = Bookmark.objects.get(id=serializer.instance.id)
-            return Response(BookmarkSerializer(bookmark).data, status=status.HTTP_201_CREATED)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class BookmarkDetailView(APIView):
-    """GET/PUT/DELETE /api/bookmarks/{id}/ - Bookmark management"""
+    """GET/PUT/DELETE /api/bookmarks/{id}/ - Bookmark detail"""
     permission_classes = [IsAuthenticated]
     
     def get(self, request, pk):
@@ -150,152 +336,121 @@ class BookmarkDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# Audio Views
-class PlaybackStateView(APIView):
-    """GET/PUT /api/playback-state/ - Audio playback state"""
+class SearchHistoryView(APIView):
+    """GET /api/search-history/ - User's search history"""
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        playback_state, created = PlaybackState.objects.get_or_create(user=request.user)
-        serializer = PlaybackStateSerializer(playback_state)
+        history = SearchHistory.objects.filter(user=request.user)[:10]
+        serializer = SearchHistorySerializer(history, many=True)
         return Response(serializer.data)
     
-    def put(self, request):
-        playback_state, created = PlaybackState.objects.get_or_create(user=request.user)
-        serializer = PlaybackStateSerializer(playback_state, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def delete(self, request):
+        """Clear search history"""
+        SearchHistory.objects.filter(user=request.user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class AudioSessionView(APIView):
-    """GET/POST /api/audio-sessions/ - Audio session tracking"""
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        sessions = AudioSession.objects.filter(user=request.user)[:10]  # Last 10 sessions
-        serializer = AudioSessionSerializer(sessions, many=True)
-        return Response(serializer.data)
-    
-    def post(self, request):
-        serializer = AudioSessionSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(user=request.user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class AudioSessionDetailView(APIView):
-    """PUT /api/audio-sessions/{id}/ - Update audio session"""
-    permission_classes = [IsAuthenticated]
-    
-    def put(self, request, pk):
-        session = get_object_or_404(AudioSession, pk=pk, user=request.user)
-        serializer = AudioSessionSerializer(session, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-# Search Views
-class SearchView(APIView):
-    """POST /api/search/ - Search Bible verses"""
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request):
-        query = request.data.get('query', '')
-        bible_id = request.data.get('bible_id')
+class VerseDetailView(APIView):
+    """GET /api/bibles/{bible_id}/verses/{verse_id}/ - Get specific verse"""
+    def get(self, request, bible_id, verse_id):
+        service = BibleAPIService()
+        verse = service.get_verse_content(bible_id, verse_id)
         
-        if not query or not bible_id:
-            return Response({'error': 'Query and bible_id are required'}, 
-                          status=status.HTTP_400_BAD_REQUEST)
+        if isinstance(verse, dict) and 'error' in verse:
+            return Response(verse, status=status.HTTP_400_BAD_REQUEST)
         
-        bible_version = get_object_or_404(BibleVersionCache, pk=bible_id)
-        
-        # Search in verses
-        verses = Verse.objects.filter(
-            chapter__book__bible_version=bible_version,
-            content__icontains=query
-        )[:50]  # Limit results
-        
-        # Save search history
-        SearchHistory.objects.create(
-            user=request.user,
-            query=query,
-            bible_version=bible_version,
-            result_count=verses.count()
-        )
-        
-        serializer = VerseSerializer(verses, many=True)
         return Response({
-            'query': query,
-            'result_count': verses.count(),
-            'results': serializer.data
+            'bible_id': bible_id,
+            'verse': verse
         })
 
 
-class SearchHistoryView(APIView):
-    """GET /api/search-history/ - User search history"""
+class BibleVersionSwitchView(APIView):
+    """POST /api/switch-bible-version/ - Temporarily switch Bible version for current session"""
     permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        history = SearchHistory.objects.filter(user=request.user)[:20]
-        serializer = SearchHistorySerializer(history, many=True)
-        return Response(serializer.data)
-
-
-# Reading Plan Views
-class ReadingPlanListView(APIView):
-    """GET /api/reading-plans/ - List available reading plans"""
-    
-    def get(self, request):
-        plans = ReadingPlan.objects.filter(is_active=True)
-        serializer = ReadingPlanSerializer(plans, many=True)
-        return Response(serializer.data)
-
-
-class UserReadingPlanView(APIView):
-    """GET/POST /api/user-reading-plans/ - User's reading plans"""
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        user_plans = UserReadingPlan.objects.filter(user=request.user)
-        serializer = UserReadingPlanSerializer(user_plans, many=True)
-        return Response(serializer.data)
     
     def post(self, request):
-        serializer = UserReadingPlanSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(user=request.user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-# Dashboard View
-class DashboardView(APIView):
-    """GET /api/dashboard/ - User dashboard data"""
-    permission_classes = [IsAuthenticated]
+        """Switch Bible version temporarily (doesn't change user preference)"""
+        bible_version_id = request.data.get('bible_version_id')
+        
+        if not bible_version_id:
+            return Response({'error': 'bible_version_id is required'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate that the Bible version exists
+        service = BibleAPIService()
+        bible_details = service.get_bible_details(bible_version_id)
+        
+        if not bible_details:
+            return Response({'error': 'Invalid Bible version ID'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Update reading progress to use this version temporarily
+        progress, created = ReadingProgress.objects.get_or_create(
+            user=request.user,
+            defaults={'bible_version_id': bible_version_id}
+        )
+        
+        # Store the current Bible version without changing user preference
+        progress.bible_version_id = bible_version_id
+        progress.save()
+        
+        return Response({
+            'message': 'Bible version switched successfully',
+            'current_bible_version': {
+                'id': bible_version_id,
+                'details': bible_details
+            }
+        })
     
-    def get(self, request):
-        # Get user's reading progress
-        progress = ReadingProgress.objects.filter(user=request.user).first()
+
+class NextChapterView(APIView):
+    """GET /api/bibles/{bible_id}/chapters/{chapter_id}/next/ - Get next chapter content"""
+    def get(self, request, bible_id, chapter_id):
+        service = BibleAPIService()
         
-        # Get recent bookmarks
-        bookmarks = Bookmark.objects.filter(user=request.user)[:5]
+        # Get next chapter content
+        next_content = service.get_next_chapter_content(bible_id, chapter_id)
         
-        # Get reading plans
-        reading_plans = UserReadingPlan.objects.filter(user=request.user, completed=False)
+        if isinstance(next_content, dict) and 'error' in next_content:
+            return Response(next_content, status=status.HTTP_400_BAD_REQUEST)
         
-        # Get recent audio sessions
-        audio_sessions = AudioSession.objects.filter(user=request.user)[:5]
+        # Add Bible version info to response
+        bible_details = service.get_bible_details(bible_id)
         
-        dashboard_data = {
-            'reading_progress': ReadingProgressSerializer(progress).data if progress else None,
-            'recent_bookmarks': BookmarkSerializer(bookmarks, many=True).data,
-            'active_reading_plans': UserReadingPlanSerializer(reading_plans, many=True).data,
-            'recent_audio_sessions': AudioSessionSerializer(audio_sessions, many=True).data,
-        }
+        # Get navigation info for the next chapter
+        next_chapter_id = next_content.get('id')
+        nav_info = service.get_chapter_navigation(bible_id, next_chapter_id)
         
-        return Response(dashboard_data)
+        return Response({
+            'bible_id': bible_id,
+            'bible_info': bible_details,
+            'chapter': next_content,
+            'navigation': nav_info
+        })
+
+class PreviousChapterView(APIView):
+    """GET /api/bibles/{bible_id}/chapters/{chapter_id}/previous/ - Get previous chapter content"""
+    def get(self, request, bible_id, chapter_id):
+        service = BibleAPIService()
+        
+        # Get previous chapter content
+        previous_content = service.get_previous_chapter_content(bible_id, chapter_id)
+        
+        if isinstance(previous_content, dict) and 'error' in previous_content:
+            return Response(previous_content, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Add Bible version info to response
+        bible_details = service.get_bible_details(bible_id)
+        
+        # Get navigation info for the previous chapter
+        previous_chapter_id = previous_content.get('id')
+        nav_info = service.get_chapter_navigation(bible_id, previous_chapter_id)
+        
+        return Response({
+            'bible_id': bible_id,
+            'bible_info': bible_details,
+            'chapter': previous_content,
+            'navigation': nav_info
+        })

@@ -1,223 +1,155 @@
-from django.db import models
-
-# Create your models here.
+# models.py (with optional improvements)
 from django.db import models
 from apps.accounts.models import User
-from django.utils import timezone
 import uuid
 
-
-class BibleVersionCache(models.Model):
-    """Cache Bible versions from API.Bible"""
-    api_bible_id = models.CharField(max_length=50, unique=True)  # From API.Bible
-    name = models.CharField(max_length=200)  # "Revised Standard Version Catholic Edition"
-    abbreviation = models.CharField(max_length=10)  # "RSVCE"
-    description = models.TextField(blank=True)
-    language_code = models.CharField(max_length=10)  # "en", "es", etc.
-    is_audio_available = models.BooleanField(default=False)
-    audio_bible_id = models.CharField(max_length=50, blank=True)  # Separate ID for audio
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        ordering = ['name']
-        
-        
-    def __str__(self):
-        return f"{self.name} ({self.abbreviation})"
-
-
-class Book(models.Model):
-    """Cache Bible books from API.Bible"""
-    api_bible_id = models.CharField(max_length=50)  # From API.Bible
-    bible_version_cache = models.ForeignKey(BibleVersionCache, on_delete=models.CASCADE, related_name='books')
-    name = models.CharField(max_length=100)  # "Genesis"
-    abbreviation = models.CharField(max_length=10)  # "GEN"
-    order = models.IntegerField()  # Order in Bible (1 for Genesis, 2 for Exodus)
-    testament = models.CharField(max_length=3, choices=[('OLD', 'Old Testament'), ('NEW', 'New Testament')])
-    chapter_count = models.IntegerField(default=0)
-    
-    class Meta:
-        ordering = ['order']
-        unique_together = ['bible_version_cache', 'api_bible_id']
-        
-    def __str__(self):
-        return f"{self.name} ({self.bible_version_cache.abbreviation})"
-
-
-class Chapter(models.Model):
-    """Cache Bible chapters from API.Bible"""
-    api_bible_id = models.CharField(max_length=50)  # From API.Bible
-    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name='chapters')
-    number = models.IntegerField()  # Chapter number
-    title = models.CharField(max_length=200, blank=True)  # Optional chapter title
-    verse_count = models.IntegerField(default=0)
-    
-    # Audio specific fields
-    audio_url = models.URLField(blank=True)  # Audio file URL from API.Bible
-    audio_duration = models.IntegerField(null=True, blank=True)  # Duration in seconds
-    
-    # Caching
-    content_cached = models.BooleanField(default=False)
-    cache_updated_at = models.DateTimeField(null=True, blank=True)
-    
-    class Meta:
-        ordering = ['number']
-        unique_together = ['book', 'number']
-        
-    def __str__(self):
-        return f"{self.book.name} {self.number}"
-
-
-class Verse(models.Model):
-    """Cache Bible verses from API.Bible - lightweight storage"""
-    api_bible_id = models.CharField(max_length=50)  # From API.Bible
-    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name='verses')
-    number = models.IntegerField()  # Verse number
-    content = models.TextField()  # Actual verse text
-    
-    # Audio timing for verse-by-verse playback
-    audio_start_time = models.FloatField(null=True, blank=True)  # Start time in seconds
-    audio_end_time = models.FloatField(null=True, blank=True)  # End time in seconds
-    
-    class Meta:
-        ordering = ['number']
-        unique_together = ['chapter', 'number']
-        
-    def __str__(self):
-        return f"{self.chapter.book.name} {self.chapter.number}:{self.number}"
-
-
 class ReadingProgress(models.Model):
-    """Track user's reading progress"""
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    bible_version_cache = models.ForeignKey(BibleVersionCache, on_delete=models.CASCADE)
-    current_book = models.ForeignKey(Book, on_delete=models.CASCADE)
-    current_chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE)
-    current_verse = models.ForeignKey(Verse, on_delete=models.CASCADE, null=True, blank=True)
+    """Track user's current reading position"""
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    bible_version_id = models.CharField(max_length=50)  # API.Bible ID
+    current_book_id = models.CharField(max_length=50, blank=True)
+    current_chapter_id = models.CharField(max_length=50, blank=True)
+    current_verse_number = models.IntegerField(default=1)
     
-    # Audio progress
-    audio_position = models.FloatField(default=0.0)  # Current position in seconds
+    # Audio state
+    audio_position = models.FloatField(default=0.0)  # in seconds
     is_audio_mode = models.BooleanField(default=False)
     
-    # Reading stats
-    reading_time_today = models.IntegerField(default=0)  # Minutes
-    reading_streak = models.IntegerField(default=0)  # Days
-    last_read_date = models.DateField(default=timezone.now)
+    # Optional: Add reading streak tracking
+    last_read_date = models.DateField(auto_now=True)
+    consecutive_days = models.IntegerField(default=0)
+    
+    # Optional: Add reading speed tracking
+    reading_speed_wpm = models.IntegerField(default=200)  # words per minute
     
     updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        unique_together = ['user', 'bible_version_cache']
-        
-    def __str__(self):
-        return f"{self.user.username} - {self.current_book.name} {self.current_chapter.number}"
+    created_at = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f"{self.user.username}'s progress"
+
+    class Meta:
+        verbose_name = "Reading Progress"
+        verbose_name_plural = "Reading Progress"
 
 class Bookmark(models.Model):
     """User bookmarks for verses"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    verse = models.ForeignKey(Verse, on_delete=models.CASCADE)
+    bible_version_id = models.CharField(max_length=50)
+    book_id = models.CharField(max_length=50)
+    chapter_id = models.CharField(max_length=50)
+    verse_id = models.CharField(max_length=50)
+    verse_content = models.TextField()
     note = models.TextField(blank=True)
-    color = models.CharField(max_length=7, default='#FFD700')  # Hex color code
-    created_at = models.DateTimeField(auto_now_add=True)
     
-    class Meta:
-        unique_together = ['user', 'verse']
-        ordering = ['-created_at']
-        
-    def __str__(self):
-        return f"{self.user.username} - {self.verse}"
+    # Optional: Add categories/tags
+    tags = models.CharField(max_length=200, blank=True)  # comma-separated
+    
+    # Optional: Add color coding
+    COLOR_CHOICES = [
+        ('yellow', 'Yellow'),
+        ('green', 'Green'),
+        ('blue', 'Blue'),
+        ('red', 'Red'),
+        ('purple', 'Purple'),
+    ]
+    color = models.CharField(max_length=20, choices=COLOR_CHOICES, default='yellow')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        unique_together = ['user', 'verse_id']
+        ordering = ['-created_at']
+        verbose_name = "Bookmark"
+        verbose_name_plural = "Bookmarks"
+
+    def __str__(self):
+        return f"{self.user.username}'s bookmark: {self.verse_id}"
 
 class SearchHistory(models.Model):
-    """Track user search queries for suggestions"""
+    """Track user search queries"""
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     query = models.CharField(max_length=500)
-    bible_version_cache = models.ForeignKey(BibleVersionCache, on_delete=models.CASCADE)
-    result_count = models.IntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
+    bible_version_id = models.CharField(max_length=50)
     
+    # Optional: Add result count
+    result_count = models.IntegerField(default=0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
     class Meta:
         ordering = ['-created_at']
-        
+        verbose_name = "Search History"
+        verbose_name_plural = "Search History"
+
     def __str__(self):
         return f"{self.user.username} searched: {self.query}"
 
-
-class AudioSession(models.Model):
-    """Track audio playback sessions"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+# Optional: Add Reading Plan model for future features
+class ReadingPlan(models.Model):
+    """User's reading plans"""
+    PLAN_TYPES = [
+        ('daily', 'Daily Reading'),
+        ('weekly', 'Weekly Reading'),
+        ('monthly', 'Monthly Reading'),
+        ('custom', 'Custom Plan'),
+    ]
+    
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE)
-    started_at = models.DateTimeField(auto_now_add=True)
-    ended_at = models.DateTimeField(null=True, blank=True)
-    duration_listened = models.IntegerField(default=0)  # Seconds actually listened
-    playback_speed = models.FloatField(default=1.0)
-    completed = models.BooleanField(default=False)
+    name = models.CharField(max_length=100)
+    plan_type = models.CharField(max_length=20, choices=PLAN_TYPES)
+    bible_version_id = models.CharField(max_length=50)
     
-    def __str__(self):
-        return f"{self.user.username} - {self.chapter} session"
-
-
-class PlaybackState(models.Model):
-    """Current playback state for resuming"""
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    current_chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, null=True, blank=True)
-    current_verse = models.ForeignKey(Verse, on_delete=models.CASCADE, null=True, blank=True)
-    position = models.FloatField(default=0.0)  # Current position in seconds
-    is_playing = models.BooleanField(default=False)
-    playback_speed = models.FloatField(default=1.0)
-    volume = models.FloatField(default=1.0)
-    updated_at = models.DateTimeField(auto_now=True)
+    # Schedule
+    target_chapters_per_day = models.IntegerField(default=1)
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
     
-    def __str__(self):
-        return f"{self.user.username}'s playback state"
-
-
-class APICache(models.Model):
-    """Cache API responses to reduce external calls"""
-    cache_key = models.CharField(max_length=255, unique=True)  # Generated key
-    endpoint = models.CharField(max_length=200)  # API endpoint called
-    response_data = models.JSONField()  # Cached response
-    expires_at = models.DateTimeField()  # When cache expires
+    # Progress
+    is_active = models.BooleanField(default=True)
+    completion_percentage = models.FloatField(default=0.0)
+    
     created_at = models.DateTimeField(auto_now_add=True)
-    
+    updated_at = models.DateTimeField(auto_now=True)
+
     class Meta:
         ordering = ['-created_at']
-        
-    def is_expired(self):
-        return timezone.now() > self.expires_at
-        
+
     def __str__(self):
-        return f"Cache: {self.cache_key}"
+        return f"{self.user.username}'s plan: {self.name}"
 
-
-# Additional models for advanced features (Phase 2)
-class ReadingPlan(models.Model):
-    """Reading plans (daily, weekly, yearly)"""
-    name = models.CharField(max_length=100)
-    description = models.TextField()
-    duration_days = models.IntegerField()  # How many days to complete
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    def __str__(self):
-        return self.name
-
-
-class UserReadingPlan(models.Model):
-    """User's participation in reading plans"""
+# Optional: Add User Notes model
+class UserNote(models.Model):
+    """User personal notes on chapters/verses"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    reading_plan = models.ForeignKey(ReadingPlan, on_delete=models.CASCADE)
-    started_at = models.DateTimeField(auto_now_add=True)
-    current_day = models.IntegerField(default=1)
-    completed = models.BooleanField(default=False)
+    bible_version_id = models.CharField(max_length=50)
     
+    # Can be attached to book, chapter, or verse
+    book_id = models.CharField(max_length=50, blank=True)
+    chapter_id = models.CharField(max_length=50, blank=True)
+    verse_id = models.CharField(max_length=50, blank=True)
+    
+    title = models.CharField(max_length=200, blank=True)
+    content = models.TextField()
+    
+    # Optional: Add note type
+    NOTE_TYPES = [
+        ('reflection', 'Reflection'),
+        ('prayer', 'Prayer'),
+        ('question', 'Question'),
+        ('insight', 'Insight'),
+        ('application', 'Application'),
+    ]
+    note_type = models.CharField(max_length=20, choices=NOTE_TYPES, default='reflection')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
     class Meta:
-        unique_together = ['user', 'reading_plan']
-        
+        ordering = ['-updated_at']
+
     def __str__(self):
-        return f"{self.user.username} - {self.reading_plan.name}"
+        return f"{self.user.username}'s note: {self.title or 'Untitled'}"

@@ -2,8 +2,7 @@ from django.template.loader import render_to_string
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 
-
-def send_otp_email(user, otp_code, purpose):
+def send_otp_email(user, otp_code, purpose, to_email=None):
     subject = (
         "Verification Code" if purpose == "verification" else "Password Reset Code"
     )
@@ -17,7 +16,7 @@ def send_otp_email(user, otp_code, purpose):
         subject=subject,
         body=text_content,
         from_email=settings.DEFAULT_FROM_EMAIL,
-        to=[user.email],
+        to=[to_email or user.email],
     )
     email.attach_alternative(html_content, "text/html")
     email.send()
