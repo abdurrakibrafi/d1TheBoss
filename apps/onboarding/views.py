@@ -409,40 +409,48 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
         data = {
             "journey_reason": (
                 JourneyReasonSerializer(
-                    JourneyReason.objects.filter(user=user).first()
+                    JourneyReason.objects.filter(user=user).first(),
+                    context={'request': request}
                 ).data
                 if JourneyReason.objects.filter(user=user).exists()
                 else None
             ),
             "denomination": (
                 DenominationSerializer(
-                    Denomination.objects.filter(user=user).first()
+                    Denomination.objects.filter(user=user).first(),
+                    context={'request': request}
                 ).data
                 if Denomination.objects.filter(user=user).exists()
                 else None
             ),
             "faith_goal": (
-                FaithGoalSerializer(FaithGoal.objects.filter(user=user).first()).data
+                FaithGoalSerializer(
+                    FaithGoal.objects.filter(user=user).first(),
+                    context={'request': request}
+                ).data
                 if FaithGoal.objects.filter(user=user).exists()
                 else None
             ),
             "tone_preference": (
                 TonePreferenceSerializer(
-                    TonePreference.objects.filter(user=user).first()
+                    TonePreference.objects.filter(user=user).first(),
+                    context={'request': request}
                 ).data
                 if TonePreference.objects.filter(user=user).exists()
                 else None
             ),
             "bible_familiarity": (
                 BibleFamiliaritySerializer(
-                    BibleFamiliarity.objects.filter(user=user).first()
+                    BibleFamiliarity.objects.filter(user=user).first(),
+                    context={'request': request}
                 ).data
                 if BibleFamiliarity.objects.filter(user=user).exists()
                 else None
             ),
             "bible_version": (
                 BibleVersionSerializer(
-                    BibleVersion.objects.filter(user=user).first()
+                    BibleVersion.objects.filter(user=user).first(),
+                    context={'request': request}
                 ).data
                 if BibleVersion.objects.filter(user=user).exists()
                 else None
@@ -458,72 +466,33 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
         updated = {}
         errors = {}
 
+        # Helper function to update a model
+        def update_model(field_name, model_class, serializer_class):
+            if field_name in request.data:
+                try:
+                    instance = model_class.objects.filter(user=user).first()
+                    serializer = serializer_class(
+                        instance, 
+                        data=request.data[field_name], 
+                        partial=True,
+                        context={'request': request}
+                    )
+                    if serializer.is_valid():
+                        # Let the serializer handle user assignment
+                        serializer.save()
+                        updated[field_name] = serializer.data
+                    else:
+                        errors[field_name] = serializer.errors
+                except Exception as e:
+                    errors[field_name] = [f"Error updating {field_name}: {str(e)}"]
+
         # Update each section if present in request.data
-        if "journey_reason" in request.data:
-            instance = JourneyReason.objects.filter(user=user).first()
-            serializer = JourneyReasonSerializer(
-                instance, data=request.data["journey_reason"], partial=True
-            )
-            if serializer.is_valid():
-                serializer.save(user=user)
-                updated["journey_reason"] = serializer.data
-            else:
-                errors["journey_reason"] = serializer.errors
-
-        if "denomination" in request.data:
-            instance = Denomination.objects.filter(user=user).first()
-            serializer = DenominationSerializer(
-                instance, data=request.data["denomination"], partial=True
-            )
-            if serializer.is_valid():
-                serializer.save(user=user)
-                updated["denomination"] = serializer.data
-            else:
-                errors["denomination"] = serializer.errors
-
-        if "faith_goal" in request.data:
-            instance = FaithGoal.objects.filter(user=user).first()
-            serializer = FaithGoalSerializer(
-                instance, data=request.data["faith_goal"], partial=True
-            )
-            if serializer.is_valid():
-                serializer.save(user=user)
-                updated["faith_goal"] = serializer.data
-            else:
-                errors["faith_goal"] = serializer.errors
-
-        if "tone_preference" in request.data:
-            instance = TonePreference.objects.filter(user=user).first()
-            serializer = TonePreferenceSerializer(
-                instance, data=request.data["tone_preference"], partial=True
-            )
-            if serializer.is_valid():
-                serializer.save(user=user)
-                updated["tone_preference"] = serializer.data
-            else:
-                errors["tone_preference"] = serializer.errors
-
-        if "bible_familiarity" in request.data:
-            instance = BibleFamiliarity.objects.filter(user=user).first()
-            serializer = BibleFamiliaritySerializer(
-                instance, data=request.data["bible_familiarity"], partial=True
-            )
-            if serializer.is_valid():
-                serializer.save(user=user)
-                updated["bible_familiarity"] = serializer.data
-            else:
-                errors["bible_familiarity"] = serializer.errors
-
-        if "bible_version" in request.data:
-            instance = BibleVersion.objects.filter(user=user).first()
-            serializer = BibleVersionSerializer(
-                instance, data=request.data["bible_version"], partial=True
-            )
-            if serializer.is_valid():
-                serializer.save(user=user)
-                updated["bible_version"] = serializer.data
-            else:
-                errors["bible_version"] = serializer.errors
+        update_model("journey_reason", JourneyReason, JourneyReasonSerializer)
+        update_model("denomination", Denomination, DenominationSerializer)
+        update_model("faith_goal", FaithGoal, FaithGoalSerializer)
+        update_model("tone_preference", TonePreference, TonePreferenceSerializer)
+        update_model("bible_familiarity", BibleFamiliarity, BibleFamiliaritySerializer)
+        update_model("bible_version", BibleVersion, BibleVersionSerializer)
 
         if errors:
             return self.error_response(
