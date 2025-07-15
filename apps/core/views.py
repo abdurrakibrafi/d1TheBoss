@@ -73,7 +73,6 @@ class PrivacyPolicyView(BaseResponseMixin, generics.RetrieveAPIView):
         except Exception as e:
             return self.handle_exception(e)
 
-
 @api_view(["POST"])
 def populate_onboarding_data(request):
     try:
@@ -173,18 +172,33 @@ def populate_onboarding_data(request):
                 option=familiarity, defaults={"is_active": True}
             )
 
-        # Bible Versions
+        # Bible Versions - Updated with API Bible IDs, titles and subtitles
         bible_versions = [
-            "KJV (King James Version)",
-            "WEB (World English Bible)",
-            "ASV (American Standard Version)",
-            "ESV (English Standard Version)",
-            "NLT (New Living Translation)",
+            {
+                "api_bible_id": "de4e12af7f28f599-01",
+                "title": "King James (Authorized) Version (KJV)",
+                "subtitle": "Classic 1611 English Protestant translation",
+            },
+            {
+                "api_bible_id": "9879dbb7cfe39e4d-01",  # Or "-04" for latest WEB
+                "title": "World English Bible (WEB)",
+                "subtitle": "Modern English public domain translation",
+            },
+            {
+                "api_bible_id": "06125adad2d5898a-01",
+                "title": "The Holy Bible, American Standard Version (ASV)",
+                "subtitle": "1901 American English revision",
+            }
         ]
 
         for version in bible_versions:
             BibleVersionOption.objects.get_or_create(
-                title=version, defaults={"is_active": True}
+                api_bible_id=version["api_bible_id"],
+                defaults={
+                    "title": version["title"],
+                    "subtitle": version["subtitle"],
+                    "is_active": True
+                }
             )
 
         return Response(
@@ -205,8 +219,8 @@ def populate_onboarding_data(request):
             },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-
-
+    
+    
 class APIGuideView(TemplateView):
     template_name = "guide/api-guide.html"
 

@@ -8,6 +8,9 @@ from .models import ReadingProgress, Bookmark, SearchHistory
 from .serializers import ReadingProgressSerializer, BookmarkSerializer, SearchHistorySerializer
 from .services.bible_api_service import BibleAPIService
 from apps.core.utils.mixins import BaseResponseMixin
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BibleVersionListView(BaseResponseMixin, APIView):
@@ -54,11 +57,36 @@ class BibleVersionListView(BaseResponseMixin, APIView):
         # Final fallback
         return '06125adad2d5898a-01'  # NIV
 
-
-class UserPreferredBibleView(APIView):
+class UserPreferredBibleView(BaseResponseMixin, APIView):
     """GET/PUT /api/user-preferred-bible/ - Get/Update user's preferred Bible version"""
     permission_classes = [IsAuthenticated]
     
+    def get_default_bible_version(self):
+        """
+        Returns a dynamic default Bible version from available options
+        """
+        try:
+            # Try to get the first available Bible version from your options
+            from apps.onboarding.models import BibleVersionOption
+            default_version = BibleVersionOption.objects.first()
+            if default_version:
+                return {
+                    'id': default_version.api_bible_id,
+                    'title': default_version.title,
+                    'subtitle': default_version.subtitle,
+                    'details': {}
+                }
+        except (ImportError, AttributeError):
+            pass
+        
+        # Ultimate fallback if everything else fails
+        return {
+            'id': '9879dbb7cfe39e4d-01',  # WEB as a reasonable default
+            'title': 'World English Bible',
+            'subtitle': 'Modern English public domain translation',
+            'details': {}
+        }
+
     def get(self, request):
         try:
             from apps.onboarding.models import BibleVersion
@@ -69,8 +97,8 @@ class UserPreferredBibleView(APIView):
             service = BibleAPIService()
             api_bible_id = bible_version_option.api_bible_id
             bible_details = service.get_bible_details(api_bible_id)
-            
-            return Response({
+
+            return self.success_response({
                 'preferred_version': {
                     'id': api_bible_id,
                     'title': bible_version_option.title,
@@ -78,14 +106,14 @@ class UserPreferredBibleView(APIView):
                     'details': bible_details
                 }
             })
-        except (ImportError, AttributeError):
+        except (ImportError, AttributeError, BibleVersion.DoesNotExist):
             # Fallback to reading progress
             try:
                 progress = ReadingProgress.objects.get(user=request.user)
                 service = BibleAPIService()
                 bible_details = service.get_bible_details(progress.bible_version_id)
                 
-                return Response({
+                return self.success_response({
                     'preferred_version': {
                         'id': progress.bible_version_id,
                         'title': 'User Selected Version',
@@ -96,16 +124,13 @@ class UserPreferredBibleView(APIView):
             except ReadingProgress.DoesNotExist:
                 pass
         except Exception as e:
-            pass
+            logger.error(f"Error fetching preferred Bible version: {str(e)}")
         
-        # Final fallback
-        return Response({
-            'preferred_version': {
-                'id': '06125adad2d5898a-01',
-                'title': 'New International Version',
-                'subtitle': 'NIV',
-                'details': {}
-            }
+        # Final fallback - now dynamic
+        default_version = self.get_default_bible_version()
+        return self.success_response({
+            'preferred_version': default_version,
+            'is_default_fallback': True  # Indicate this is a fallback
         })
     
     def put(self, request):
@@ -113,8 +138,7 @@ class UserPreferredBibleView(APIView):
         bible_version_id = request.data.get('bible_version_id')
         
         if not bible_version_id:
-            return Response({'error': 'bible_version_id is required'}, 
-                          status=status.HTTP_400_BAD_REQUEST)
+            return self.bad_request_response('bible_version_id is required')
         
         try:
             from apps.onboarding.models import BibleVersion, BibleVersionOption
@@ -123,135 +147,226 @@ class UserPreferredBibleView(APIView):
             bible_version_option = BibleVersionOption.objects.get(api_bible_id=bible_version_id)
             
             # Update or create user's Bible version preference
-            user_bible_version, created = BibleVersion.objects.get_or_create(
+            user_bible_version, created = BibleVersion.objects.update_or_create(
                 user=request.user,
                 defaults={'bible_version_option': bible_version_option}
             )
             
-            if not created:
-                user_bible_version.bible_version_option = bible_version_option
-                user_bible_version.save()
-            
             # Also update reading progress to use new version
-            progress, created = ReadingProgress.objects.get_or_create(
+            ReadingProgress.objects.update_or_create(
                 user=request.user,
                 defaults={'bible_version_id': bible_version_id}
             )
             
-            if not created:
-                progress.bible_version_id = bible_version_id
-                progress.save()
+            return self.success_response(
+                data={
+                    'bible_version_id': bible_version_id,
+                    'title': bible_version_option.title,
+                    'subtitle': bible_version_option.subtitle
+                },
+                message='Preferred Bible version updated successfully'
+            )
             
-            return Response({
-                'message': 'Preferred Bible version updated successfully',
-                'bible_version_id': bible_version_id
-            })
-            
+        except BibleVersionOption.DoesNotExist:
+            return self.not_found_response('Specified Bible version not found')
         except ImportError:
             # Fallback: just update reading progress
-            progress, created = ReadingProgress.objects.get_or_create(
+            ReadingProgress.objects.update_or_create(
                 user=request.user,
                 defaults={'bible_version_id': bible_version_id}
             )
             
-            if not created:
-                progress.bible_version_id = bible_version_id
-                progress.save()
-            
-            return Response({
-                'message': 'Bible version preference updated',
-                'bible_version_id': bible_version_id
-            })
+            return self.success_response(
+                data={'bible_version_id': bible_version_id},
+                message='Bible version preference updated (fallback)'
+            )
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
-class BookListView(APIView):
+            logger.error(f"Error updating Bible version: {str(e)}")
+            return self.error_response(
+                message='Failed to update Bible version',
+                error_code='UPDATE_FAILED',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+class BookListView(BaseResponseMixin, APIView):
     """GET /api/bibles/{bible_id}/books/ - List books for a Bible version"""
+    
     def get(self, request, bible_id):
-        service = BibleAPIService()
-        books = service.get_books(bible_id)
-        
-        if isinstance(books, dict) and 'error' in books:
-            return Response(books, status=status.HTTP_400_BAD_REQUEST)
-        
-        return Response({
-            'bible_id': bible_id,
-            'books': books
-        })
+        try:
+            service = BibleAPIService()
+            books = service.get_books(bible_id)
+            
+            if isinstance(books, dict) and 'error' in books:
+                return self.error_response(
+                    message=books.get('error', 'Failed to fetch books'),
+                    error_code='BIBLE_API_ERROR',
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            return self.success_response({
+                'bible_id': bible_id,
+                'books': books,
+                'count': len(books) if isinstance(books, list) else 0
+            })
+            
+        except Exception as e:
+            logger.error(f"Error fetching books for Bible {bible_id}: {str(e)}")
+            return self.error_response(
+                message='Failed to retrieve books list',
+                error_code='BOOKS_RETRIEVAL_ERROR',
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
-class ChapterListView(APIView):
+class ChapterListView(APIView, BaseResponseMixin): # <--- Add BaseResponseMixin here
     """GET /api/bibles/{bible_id}/books/{book_id}/chapters/ - List chapters"""
     def get(self, request, bible_id, book_id):
         service = BibleAPIService()
-        chapters = service.get_chapters(bible_id, book_id)
+        chapters_data = service.get_chapters(bible_id, book_id) # Renamed for clarity
+
+        if isinstance(chapters_data, dict) and 'error' in chapters_data:
+            status_code = chapters_data.get('statusCode', status.HTTP_400_BAD_REQUEST)
+            message = chapters_data.get('error', 'An error occurred while fetching chapters.')
+            
+            if status_code == status.HTTP_404_NOT_FOUND:
+                return self.not_found_response(message=message)
+            elif status_code == status.HTTP_400_BAD_REQUEST:
+                return self.bad_request_response(message=message)
+            else:
+                return self.error_response(
+                    message=message,
+                    status_code=status_code,
+                    error_code="EXTERNAL_API_ERROR" # Or a more specific code if the external API provides one
+                )
         
-        if isinstance(chapters, dict) and 'error' in chapters:
-            return Response(chapters, status=status.HTTP_400_BAD_REQUEST)
-        
-        return Response({
-            'bible_id': bible_id,
-            'book_id': book_id,
-            'chapters': chapters
-        })
+        return self.success_response(
+            data={
+                'bible_id': bible_id,
+                'book_id': book_id,
+                'chapters': chapters_data # Use the fetched chapters data
+            },
+            message="Chapters retrieved successfully." # Add a success message
+        )
 
 
-class ChapterContentView(APIView):
+class ChapterContentView(APIView, BaseResponseMixin): # <--- ADDED BaseResponseMixin here
     """GET /api/bibles/{bible_id}/chapters/{chapter_id}/ - Get chapter content"""
     def get(self, request, bible_id, chapter_id):
         service = BibleAPIService()
+        
+        # --- 1. Fetch chapter content ---
         content = service.get_chapter_content(bible_id, chapter_id)
         
         if isinstance(content, dict) and 'error' in content:
-            return Response(content, status=status.HTTP_400_BAD_REQUEST)
+            # Use error_response from the mixin
+            status_code = content.get('statusCode', status.HTTP_400_BAD_REQUEST)
+            message = content.get('error', 'Failed to retrieve chapter content.')
+            
+            if status_code == status.HTTP_404_NOT_FOUND:
+                return self.not_found_response(message=message)
+            else:
+                return self.error_response(
+                    message=message,
+                    status_code=status_code,
+                    error_code="CHAPTER_CONTENT_ERROR" # Custom error code for this specific issue
+                )
         
-        # Add Bible version info to response
+        # --- 2. Add Bible version info to response ---
         bible_details = service.get_bible_details(bible_id)
-        
-        # Get navigation info
-        nav_info = service.get_chapter_navigation(bible_id, chapter_id)
-        
-        return Response({
-            'bible_id': bible_id,
-            'bible_info': bible_details,
-            'chapter': content,
-            'navigation': nav_info  # Added navigation info
-        })
+        if isinstance(bible_details, dict) and 'error' in bible_details:
+            status_code = bible_details.get('statusCode', status.HTTP_400_BAD_REQUEST)
+            message = bible_details.get('error', 'Failed to retrieve Bible details.')
+            
+            if status_code == status.HTTP_404_NOT_FOUND:
+                # If the bible_id itself isn't found, this is a 404 for the whole request
+                return self.not_found_response(message=message)
+            else:
+                # Other errors fetching bible_details could still be reported as server errors
+                return self.error_response(
+                    message=message,
+                    status_code=status_code,
+                    error_code="BIBLE_DETAILS_ERROR"
+                )
 
-class SearchView(APIView):
+        # --- 3. Get navigation info ---
+        nav_info = service.get_chapter_navigation(bible_id, chapter_id)
+        if isinstance(nav_info, dict) and 'error' in nav_info:
+            status_code = nav_info.get('statusCode', status.HTTP_400_BAD_REQUEST)
+            message = nav_info.get('error', 'Failed to retrieve navigation info.')
+
+            return self.error_response(
+                message=message,
+                status_code=status_code,
+                error_code="NAVIGATION_INFO_ERROR"
+            )
+ 
+        return self.success_response(
+            data={
+                'bible_id': bible_id,
+                'bible_info': bible_details,
+                'chapter': content,
+                'navigation': nav_info
+            },
+            message="Chapter content and details retrieved successfully."
+        )
+    
+
+
+class SearchView(APIView, BaseResponseMixin):
     """GET /api/bibles/{bible_id}/search/?query=text - Search verses"""
     permission_classes = [IsAuthenticated]
     
     def get(self, request, bible_id):
         query = request.query_params.get('query')
         if not query:
-            return Response({'error': 'Query parameter required'}, 
-                          status=status.HTTP_400_BAD_REQUEST)
+            return self.bad_request_response(
+                message="Query parameter 'query' is required.",
+                error_code="QUERY_PARAM_REQUIRED"
+            )
         
         limit = request.query_params.get('limit', 10)
         try:
             limit = int(limit)
+            if limit <= 0: # Add a check for non-positive limit
+                return self.bad_request_response(
+                    message="Limit must be a positive integer.",
+                    error_code="INVALID_LIMIT"
+                )
         except ValueError:
-            limit = 10
+            return self.bad_request_response(
+                message="Limit must be an integer.",
+                error_code="INVALID_LIMIT_TYPE"
+            )
         
         service = BibleAPIService()
         results = service.search_verses(bible_id, query, limit)
         
         if isinstance(results, dict) and 'error' in results:
-            return Response(results, status=status.HTTP_400_BAD_REQUEST)
+            status_code = results.get('statusCode', status.HTTP_400_BAD_REQUEST)
+            message = results.get('error', 'Failed to perform search.')
+            
+            if status_code == status.HTTP_404_NOT_FOUND:
+                return self.not_found_response(message=message)
+            else:
+                return self.error_response(
+                    message=message,
+                    status_code=status_code,
+                    error_code="SEARCH_ERROR"
+                )
         
-        # Save search history
         SearchHistory.objects.create(
             user=request.user,
             query=query,
             bible_version_id=bible_id
         )
         
-        return Response({
-            'bible_id': bible_id,
-            'search_results': results
-        })
+        return self.success_response(
+            data={
+                'bible_id': bible_id,
+                'search_results': results
+            },
+            message="Search completed successfully."
+        )
 
 
 class ReadingProgressView(APIView):
@@ -340,35 +455,48 @@ class BookmarkDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class SearchHistoryView(APIView):
+class SearchHistoryView(APIView, BaseResponseMixin):
     """GET /api/search-history/ - User's search history"""
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        history = SearchHistory.objects.filter(user=request.user)[:10]
+        history = SearchHistory.objects.filter(user=request.user).order_by('-timestamp')[:10] # Added order_by for typical history views
         serializer = SearchHistorySerializer(history, many=True)
-        return Response(serializer.data)
+        return self.success_response(data=serializer.data, message="Search history retrieved successfully.")
     
     def delete(self, request):
         """Clear search history"""
         SearchHistory.objects.filter(user=request.user).delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return self.deleted_response(message="Search history cleared successfully.")
 
 
-class VerseDetailView(APIView):
+class VerseDetailView(APIView, BaseResponseMixin):
     """GET /api/bibles/{bible_id}/verses/{verse_id}/ - Get specific verse"""
     def get(self, request, bible_id, verse_id):
         service = BibleAPIService()
-        verse = service.get_verse_content(bible_id, verse_id)
+        verse_data = service.get_verse_content(bible_id, verse_id)
         
-        if isinstance(verse, dict) and 'error' in verse:
-            return Response(verse, status=status.HTTP_400_BAD_REQUEST)
+        if isinstance(verse_data, dict) and 'error' in verse_data:
+            status_code = verse_data.get('statusCode', status.HTTP_400_BAD_REQUEST)
+            message = verse_data.get('error', 'Failed to retrieve verse content.')
+            
+            if status_code == status.HTTP_404_NOT_FOUND:
+                return self.not_found_response(message=message)
+            else:
+                return self.error_response(
+                    message=message,
+                    status_code=status_code,
+                    error_code="VERSE_CONTENT_ERROR"
+                )
         
-        return Response({
-            'bible_id': bible_id,
-            'verse': verse
-        })
-
+        return self.success_response(
+            data={
+                'bible_id': bible_id,
+                'verse': verse_data
+            },
+            message="Verse content retrieved successfully."
+        )
+    
 
 class BibleVersionSwitchView(APIView):
     """POST /api/switch-bible-version/ - Temporarily switch Bible version for current session"""
@@ -408,53 +536,109 @@ class BibleVersionSwitchView(APIView):
             }
         })
     
-
-class NextChapterView(APIView):
+class NextChapterView(APIView, BaseResponseMixin):
     """GET /api/bibles/{bible_id}/chapters/{chapter_id}/next/ - Get next chapter content"""
     def get(self, request, bible_id, chapter_id):
         service = BibleAPIService()
         
-        # Get next chapter content
         next_content = service.get_next_chapter_content(bible_id, chapter_id)
         
         if isinstance(next_content, dict) and 'error' in next_content:
-            return Response(next_content, status=status.HTTP_400_BAD_REQUEST)
+            status_code = next_content.get('statusCode', status.HTTP_400_BAD_REQUEST)
+            message = next_content.get('error', 'Failed to retrieve next chapter content.')
+            if status_code == status.HTTP_404_NOT_FOUND:
+                return self.not_found_response(message=message)
+            else:
+                return self.error_response(
+                    message=message,
+                    status_code=status_code,
+                    error_code="NEXT_CHAPTER_CONTENT_ERROR"
+                )
         
-        # Add Bible version info to response
         bible_details = service.get_bible_details(bible_id)
+        if isinstance(bible_details, dict) and 'error' in bible_details:
+            status_code = bible_details.get('statusCode', status.HTTP_400_BAD_REQUEST)
+            message = bible_details.get('error', 'Failed to retrieve Bible details.')
+            if status_code == status.HTTP_404_NOT_FOUND:
+                return self.not_found_response(message=message)
+            else:
+                return self.error_response(
+                    message=message,
+                    status_code=status_code,
+                    error_code="BIBLE_DETAILS_ERROR"
+                )
         
-        # Get navigation info for the next chapter
         next_chapter_id = next_content.get('id')
         nav_info = service.get_chapter_navigation(bible_id, next_chapter_id)
+        if isinstance(nav_info, dict) and 'error' in nav_info:
+            status_code = nav_info.get('statusCode', status.HTTP_400_BAD_REQUEST)
+            message = nav_info.get('error', 'Failed to retrieve navigation info for next chapter.')
+            return self.error_response(
+                message=message,
+                status_code=status_code,
+                error_code="NAVIGATION_INFO_ERROR"
+            )
         
-        return Response({
-            'bible_id': bible_id,
-            'bible_info': bible_details,
-            'chapter': next_content,
-            'navigation': nav_info
-        })
+        return self.success_response(
+            data={
+                'bible_id': bible_id,
+                'bible_info': bible_details,
+                'chapter': next_content,
+                'navigation': nav_info
+            },
+            message="Next chapter content and details retrieved successfully."
+        )
 
-class PreviousChapterView(APIView):
+
+class PreviousChapterView(APIView, BaseResponseMixin):
     """GET /api/bibles/{bible_id}/chapters/{chapter_id}/previous/ - Get previous chapter content"""
     def get(self, request, bible_id, chapter_id):
         service = BibleAPIService()
         
-        # Get previous chapter content
         previous_content = service.get_previous_chapter_content(bible_id, chapter_id)
         
         if isinstance(previous_content, dict) and 'error' in previous_content:
-            return Response(previous_content, status=status.HTTP_400_BAD_REQUEST)
+            status_code = previous_content.get('statusCode', status.HTTP_400_BAD_REQUEST)
+            message = previous_content.get('error', 'Failed to retrieve previous chapter content.')
+            if status_code == status.HTTP_404_NOT_FOUND:
+                return self.not_found_response(message=message)
+            else:
+                return self.error_response(
+                    message=message,
+                    status_code=status_code,
+                    error_code="PREVIOUS_CHAPTER_CONTENT_ERROR"
+                )
         
-        # Add Bible version info to response
         bible_details = service.get_bible_details(bible_id)
+        if isinstance(bible_details, dict) and 'error' in bible_details:
+            status_code = bible_details.get('statusCode', status.HTTP_400_BAD_REQUEST)
+            message = bible_details.get('error', 'Failed to retrieve Bible details.')
+            if status_code == status.HTTP_404_NOT_FOUND:
+                return self.not_found_response(message=message)
+            else:
+                return self.error_response(
+                    message=message,
+                    status_code=status_code,
+                    error_code="BIBLE_DETAILS_ERROR"
+                )
         
-        # Get navigation info for the previous chapter
         previous_chapter_id = previous_content.get('id')
         nav_info = service.get_chapter_navigation(bible_id, previous_chapter_id)
+        if isinstance(nav_info, dict) and 'error' in nav_info:
+            status_code = nav_info.get('statusCode', status.HTTP_400_BAD_REQUEST)
+            message = nav_info.get('error', 'Failed to retrieve navigation info for previous chapter.')
+            return self.error_response(
+                message=message,
+                status_code=status_code,
+                error_code="NAVIGATION_INFO_ERROR"
+            )
         
-        return Response({
-            'bible_id': bible_id,
-            'bible_info': bible_details,
-            'chapter': previous_content,
-            'navigation': nav_info
-        })
+        return self.success_response(
+            data={
+                'bible_id': bible_id,
+                'bible_info': bible_details,
+                'chapter': previous_content,
+                'navigation': nav_info
+            },
+            message="Previous chapter content and details retrieved successfully."
+        )

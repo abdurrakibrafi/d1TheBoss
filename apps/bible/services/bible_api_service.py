@@ -41,22 +41,31 @@ class BibleAPIService:
     
     def get_bible_versions(self):
         """Get list of available Bible versions from database"""
+        print("DEBUG: Starting get_bible_versions")  # Debug log
+        
         try:
             from apps.onboarding.models import BibleVersionOption
+            print("DEBUG: Successfully imported BibleVersionOption")  # Debug log
             
             cache_key = "bible_versions_from_db"
             cached_versions = cache.get(cache_key)
             
             if cached_versions:
+                print("DEBUG: Returning cached versions")  # Debug log
                 return cached_versions
             
+            print("DEBUG: Querying active versions from DB")  # Debug log
             active_versions = BibleVersionOption.objects.filter(is_active=True)
+            print(f"DEBUG: Found {active_versions.count()} active versions")  # Debug log
+            
             versions = []
             
             for version_option in active_versions:
+                print(f"DEBUG: Processing version {version_option.title}")  # Debug log
                 if version_option.api_bible_id:
                     # Get details from API.Bible
                     bible_info = self.get_bible_details(version_option.api_bible_id)
+                    print(f"DEBUG: Got bible info for {version_option.api_bible_id}")  # Debug log
                     
                     versions.append({
                         'id': version_option.api_bible_id,
@@ -65,16 +74,23 @@ class BibleAPIService:
                         'name': bible_info.get('name', version_option.title) if bible_info else version_option.title,
                         'description': bible_info.get('description', '') if bible_info else '',
                         'language': bible_info.get('language', {}).get('name', 'English') if bible_info else 'English',
-                        'is_default': False  # Will be set by view based on user preference
+                        'is_default': False
                     })
             
             # Cache for 1 hour
             cache.set(cache_key, versions, 3600)
+            print(f"DEBUG: Returning {len(versions)} versions from DB")  # Debug log
             return versions
             
-        except ImportError:
+        except ImportError as e:
+            print(f"DEBUG: ImportError - {str(e)}")  # Debug log
             # Fallback to hardcoded versions
             return self.get_hardcoded_versions()
+        except Exception as e:
+            print(f"DEBUG: Unexpected error - {str(e)}")  # Debug log
+            return self.get_hardcoded_versions()
+
+
     
     def get_hardcoded_versions(self):
         """Fallback hardcoded versions"""
