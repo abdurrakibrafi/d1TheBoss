@@ -35,8 +35,19 @@ services:
       - redis_data:/data
     restart: unless-stopped
 
+  smtp4dev:
+    image: rnwood/smtp4dev:linux-amd64-v3
+    container_name: bibel_smtp4dev
+    ports:
+      - "3000:80"   # Web UI (access at http://localhost:3000)
+      - "2525:25"   # SMTP port (for Django to send emails)
+    volumes:
+      - smtp4dev_data:/smtp4dev
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
   static_volume:
   media_volume:
+  smtp4dev_data:

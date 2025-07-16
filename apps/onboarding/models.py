@@ -6,6 +6,8 @@ class JourneyReasonOption(models.Model):
     option = models.CharField(max_length=250, blank=True, null=True)
     is_active = models.BooleanField(default=True)
 
+    is_selected = models.BooleanField(default=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -39,6 +41,9 @@ class DenominationOption(models.Model):
     name = models.CharField(max_length=200, blank=True, null=True)
     is_active = models.BooleanField(default=True)
 
+    is_selected = models.BooleanField(default=False)
+
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -58,6 +63,7 @@ class Denomination(models.Model):
         DenominationOption, on_delete=models.CASCADE, blank=True, null=True
     )
     name = models.CharField(max_length=200, blank=True, null=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -72,6 +78,8 @@ class Denomination(models.Model):
 class FaithGoalQuestion(models.Model):
     question = models.CharField(max_length=250, blank=True, null=True)
     is_active = models.BooleanField(default=True)
+
+    is_selected = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -90,6 +98,8 @@ class FaithGoalOption(models.Model):
     )
     option = models.CharField(max_length=250, blank=True, null=True)
     is_active = models.BooleanField(default=True)
+
+    is_selected = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -127,15 +137,20 @@ class FaithGoal(models.Model):
 
 
 class TonePreferenceOption(models.Model):
-    option_title = models.CharField(max_length=100, blank=True, null=True)
-    option_subtitle = models.CharField(max_length=200, blank=True, null=True)
+    title = models.CharField(max_length=100, blank=True, null=True)
+    name = models.CharField(max_length=100, blank=True, null=True)
+    description = models.CharField(max_length=200, blank=True, null=True)
+    quote = models.CharField(max_length=200, blank=True, null=True)
+    icon = models.ImageField(upload_to="onboarding/tone_preference_icons/", blank=True, null=True)
     is_active = models.BooleanField(default=True)
+
+    is_selected = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.option_title}"
+        return f"{self.title}"
 
     class Meta:
         ordering = ["created_at"]
@@ -154,7 +169,7 @@ class TonePreference(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.tone_preference_option.option_title
+        return self.tone_preference_option.title
 
     class Meta:
         ordering = ["created_at"]
@@ -162,14 +177,22 @@ class TonePreference(models.Model):
 
 
 class BibleFamiliarityOption(models.Model):
-    option = models.CharField(max_length=200, blank=True, null=True)
+    label = models.CharField(max_length=50, blank=True, null=True)
+    text1 = models.CharField(max_length=200, blank=True, null=True)
+    text2 = models.CharField(max_length=200, blank=True, null=True)
+    title = models.CharField(max_length=200, blank=True, null=True)
+    name = models.CharField(max_length=200, blank=True, null=True)
+    caption = models.CharField(max_length=200, blank=True, null=True)
+
     is_active = models.BooleanField(default=True)
+
+    is_selected = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.option
+        return self.label
 
     class Meta:
         ordering = ["created_at"]
@@ -189,7 +212,7 @@ class BibleFamiliarity(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.bible_familiarity_option.option}"
+        return f"{self.bible_familiarity_option.label}"
 
     class Meta:
         ordering = ["created_at"]
@@ -203,6 +226,8 @@ class BibleVersionOption(models.Model):
     api_bible_id = models.CharField(max_length=50, unique=True, blank=True, null=True) 
     
     is_active = models.BooleanField(default=True)
+
+    is_selected = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -232,3 +257,5 @@ class BibleVersion(models.Model):
     class Meta:
         ordering = ["created_at"]
         verbose_name_plural = "13. Bible Versions"
+
+

@@ -73,38 +73,39 @@ class PrivacyPolicyView(BaseResponseMixin, generics.RetrieveAPIView):
         except Exception as e:
             return self.handle_exception(e)
 
+
 @api_view(["POST"])
 def populate_onboarding_data(request):
     try:
+        # 🧹 DELETE all old data
+        JourneyReasonOption.objects.all().delete()
+        DenominationOption.objects.all().delete()
+        FaithGoalOption.objects.all().delete()
+        FaithGoalQuestion.objects.all().delete()
+        TonePreferenceOption.objects.all().delete()
+        BibleFamiliarityOption.objects.all().delete()
+        BibleVersionOption.objects.all().delete()
+
+        # 🚀 INSERT fresh data
+
         # Journey Reasons
         journey_reasons = [
             "Clarity to overcome doubts",
             "Confidence to share my beliefs",
         ]
-
         for reason in journey_reasons:
-            JourneyReasonOption.objects.get_or_create(
-                option=reason, defaults={"is_active": True}
+            JourneyReasonOption.objects.create(
+                option=reason, is_active=True
             )
 
         # Denominations
         denominations = [
-            "Catholic",
-            "Protestant",
-            "Baptist",
-            "Nondenominational",
-            "Methodist",
-            "Pentecostal",
-            "Lutheran",
-            "Evangelical",
-            "Adventist",
-            "Orthodox",
-            "Other",
+            "Catholic", "Protestant", "Baptist", "Nondenominational", "Methodist",
+            "Pentecostal", "Lutheran", "Evangelical", "Adventist", "Orthodox", "Other",
         ]
-
         for denomination in denominations:
-            DenominationOption.objects.get_or_create(
-                name=denomination, defaults={"is_active": True}
+            DenominationOption.objects.create(
+                name=denomination, is_active=True
             )
 
         # Faith Goal Questions and Options
@@ -134,45 +135,116 @@ def populate_onboarding_data(request):
                 ],
             },
         ]
-
         for item in faith_goal_data:
-            question_obj, created = FaithGoalQuestion.objects.get_or_create(
-                question=item["question"], defaults={"is_active": True}
+            question_obj = FaithGoalQuestion.objects.create(
+                question=item["question"], is_active=True
             )
-
             for option in item["options"]:
-                FaithGoalOption.objects.get_or_create(
+                FaithGoalOption.objects.create(
                     faith_goal_question=question_obj,
                     option=option,
-                    defaults={"is_active": True},
+                    is_active=True,
                 )
 
         # Tone Preferences
-        tone_preferences = [
-            "Clear and Hopeful",
-            "Dynamic and Powerful",
-            "Practical and Everyday",
-            "Encouraging and Purposeful",
-            "Uplifting and Optimistic",
-            "Scholarly and Rational",
-            "Warm and Relatable",
-            "Passionate and Empowering",
+        tone_preference_data = [
+            {
+                "title": "Clear and Hopeful",
+                "name": "Clear and Hopeful",
+                "description": "Simple, direct, and encouraging. Speaks to God’s love and faithfulness in an easily understood way.",
+                "quote": "God allows us to choose because He loves us deeply. Even in our struggles, His grace is always enough.",
+            },
+            {
+                "title": "Dynamic and Powerful",
+                "name": "Dynamic and Powerful",
+                "description": "Emotive, bold, and filled with vivid imagery. Designed to inspire and energize",
+                "quote": "Sin may exist, but so does God’s unstoppable power to redeem, restore, and turn every story into a victory.",
+            },
+            {
+                "title": "Practical and Everyday",
+                "name": "Practical and Everyday",
+                "description": "Grounded and solution-oriented, focusing on how faith applies to daily life",
+                "quote": "Sometimes life feels messy, but God uses even our mistakes to shape us and teach us how to walk in His ways.",
+            },
+            {
+                "title": "Encouraging and Purposeful",
+                "name": "Encouraging and Purposeful",
+                "description": "Focuses on meaning and growth through challenges, using affirming and positive language",
+                "quote": "It’s not always easy to understand, but God allows challenges so we can grow stronger in faith and closer to Him.",
+            },
+            {
+                "title": "Uplifting and Optimistic",
+                "name": "Uplifting and Optimistic",
+                "description": "Highlights hope and joy even in adversity, emphasizing God’s ongoing provision",
+                "quote": "Even in a broken world, God’s love shines through. His plan for good will always outweigh the pain we see now.",
+            },
+            {
+                "title": "Scholarly and Rational",
+                "name": "Scholarly and Rational",
+                "description": "Appeals to logic and reason, using well-structured arguments and historical/theological insights.",
+                "quote": "Sin entered through humanity’s choices, but God’s plan through Jesus shows us the depth of His justice and mercy.",
+            },
+            {
+                "title": "Warm and Relatable",
+                "name": "Warm and Relatable",
+                "description": "Conversational, empathetic, and emotionally resonant. Speaks to the heart with compassion.",
+                "quote": "That’s a tough question—it’s okay to wrestle with it. What matters most is knowing God is with you, no matter what.",
+            },
+            {
+                "title": "Passionate and Empowering",
+                "name": "Passionate and Empowering",
+                "description": "Focused on spiritual growth and perseverance, emphasizing strength and action",
+                "quote": "Sin doesn’t define us—God’s purpose does. You have the power to walk boldly in the freedom He’s given you.",
+            },
         ]
-
-        for tone in tone_preferences:
-            TonePreferenceOption.objects.get_or_create(
-                option_title=tone, defaults={"is_active": True}
+        for tone in tone_preference_data:
+            TonePreferenceOption.objects.create(
+                title=tone["title"],
+                name=tone["name"],
+                description=tone["description"],
+                quote=tone["quote"],
+                is_active=True
             )
 
         # Bible Familiarity
-        bible_familiarity = ["None", "A Little", "A Lot"]
-
-        for familiarity in bible_familiarity:
-            BibleFamiliarityOption.objects.get_or_create(
-                option=familiarity, defaults={"is_active": True}
+        bible_familiarity_data = [
+            {
+                "label": "None",
+                "text1": "New to the Word? No problem!",
+                "text2": "",
+                "title": "Simplified Responses",
+                "name": "Simplified Responses",
+                "caption": "Preachly will break things down in an easy-to-understand way, offering clear, simple explanations to help you build a strong foundation.",
+            },
+            {
+                "label": "A Little",
+                "text1": "A great foundation! Let's go deeper",
+                "text2": "You have some knowledge, and we'll build on it!",
+                "title": "In-Depth Responses",
+                "name": "In-Depth Responses",
+                "caption": "Preachly's answers will include context connections, and deeper insights to enrich your understanding",
+            },
+            {
+                "label": "A Lot",
+                "text1": "Ready for the deep dive?",
+                "text2": "",
+                "title": "Multi-Argumentation Responses",
+                "name": "Multi-Argumentation Responses",
+                "caption": "Preachly will provide multi-layered explanations, exploring different perspectives, theological arguments, and scriptural connections to help you sharpen your understanding",
+            },
+        ]
+        for item in bible_familiarity_data:
+            BibleFamiliarityOption.objects.create(
+                label=item["label"],
+                text1=item["text1"],
+                text2=item["text2"],
+                title=item["title"],
+                name=item["name"],
+                caption=item["caption"],
+                is_active=True
             )
 
-        # Bible Versions - Updated with API Bible IDs, titles and subtitles
+        # Bible Versions
         bible_versions = [
             {
                 "api_bible_id": "de4e12af7f28f599-01",
@@ -180,7 +252,7 @@ def populate_onboarding_data(request):
                 "subtitle": "Classic 1611 English Protestant translation",
             },
             {
-                "api_bible_id": "9879dbb7cfe39e4d-01",  # Or "-04" for latest WEB
+                "api_bible_id": "9879dbb7cfe39e4d-01",
                 "title": "World English Bible (WEB)",
                 "subtitle": "Modern English public domain translation",
             },
@@ -190,37 +262,29 @@ def populate_onboarding_data(request):
                 "subtitle": "1901 American English revision",
             }
         ]
-
         for version in bible_versions:
-            BibleVersionOption.objects.get_or_create(
+            BibleVersionOption.objects.create(
                 api_bible_id=version["api_bible_id"],
-                defaults={
-                    "title": version["title"],
-                    "subtitle": version["subtitle"],
-                    "is_active": True
-                }
+                title=version["title"],
+                subtitle=version["subtitle"],
+                is_active=True
             )
 
-        return Response(
-            {
-                "success": True,
-                "message": "All onboarding data populated successfully!",
-                "status_code": 200,
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response({
+            "success": True,
+            "message": "✅ All onboarding data wiped & repopulated successfully!",
+            "status_code": 200,
+        }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        return Response(
-            {
-                "success": False,
-                "message": f"Error populating data: {str(e)}",
-                "status_code": 500,
-            },
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
-    
-    
+        return Response({
+            "success": False,
+            "message": f"❌ Error: {str(e)}",
+            "status_code": 500,
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
 class APIGuideView(TemplateView):
     template_name = "guide/api-guide.html"
 

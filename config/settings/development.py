@@ -21,14 +21,15 @@ DATABASES = {
     }
 }
 
-# Email configuration for development
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = env("DEV_EMAIL_HOST")
-EMAIL_HOST_USER = env("DEV_EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = env("DEV_EMAIL_HOST_PASSWORD")
-EMAIL_PORT = env.int("DEV_EMAIL_PORT", default=587)
-EMAIL_USE_TLS = True
-DEFAULT_FROM_EMAIL = env("DEV_DEFAULT_FROM_EMAIL")
+
+# Then configure email settings like this:
+EMAIL_HOST = env.str('EMAIL_HOST', default='smtp4dev')  # For string values
+EMAIL_PORT = env.int('EMAIL_PORT', default=25)          # For integer values
+EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=False)  # For boolean values
+EMAIL_HOST_USER = env.str('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = env.str('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = env.str('DEFAULT_FROM_EMAIL', default='no-reply@example.com')
+
 
 # Redis for development
 CHANNEL_LAYERS = {

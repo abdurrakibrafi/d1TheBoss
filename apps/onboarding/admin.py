@@ -71,8 +71,8 @@ class FaithGoalAdmin(admin.ModelAdmin):
 # 08. Tone Preference Options
 @admin.register(TonePreferenceOption)
 class TonePreferenceOptionAdmin(admin.ModelAdmin):
-    list_display = ["option_title", "option_subtitle", "is_active"]
-    search_fields = ["option_title", "option_subtitle"]
+    list_display = ["title", "description", "is_active"]
+    search_fields = ["title", "description"]
     list_filter = ["is_active"]
 
 
@@ -86,8 +86,8 @@ class TonePreferenceAdmin(admin.ModelAdmin):
 # 10. Bible Familiarity
 @admin.register(BibleFamiliarityOption)
 class BibleFamiliarityOptionAdmin(admin.ModelAdmin):
-    list_display = ["option", "is_active"]
-    search_fields = ["option"]
+    list_display = ["label", "text1", "text2", "is_active"]
+    search_fields = ["label", "text1", "text2"]
     list_filter = ["is_active"]
 
 

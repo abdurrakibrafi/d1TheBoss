@@ -24,13 +24,13 @@ from apps.accounts.models import UserProfile
 class JourneyReasonOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = JourneyReasonOption
-        fields = ["id", "option", "is_active"]
+        fields = ["id", "option", "is_active", "is_selected"]
 
 
 class DenominationOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = DenominationOption
-        fields = ["id", "name", "is_active"]
+        fields = ["id", "name", "is_active", "is_selected"]
 
 
 class FaithGoalQuestionSerializer(serializers.ModelSerializer):
@@ -38,7 +38,7 @@ class FaithGoalQuestionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FaithGoalQuestion
-        fields = ["id", "question", "is_active", "options"]
+        fields = ["id", "question", "is_active", "is_selected", "options"]
 
     def get_options(self, obj):
         options = obj.faithgoaloption_set.filter(is_active=True)
@@ -48,25 +48,25 @@ class FaithGoalQuestionSerializer(serializers.ModelSerializer):
 class FaithGoalOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = FaithGoalOption
-        fields = ["id", "option", "is_active"]
+        fields = ["id", "option", "is_active", "is_selected"]
 
 
 class TonePreferenceOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = TonePreferenceOption
-        fields = ["id", "option_title", "option_subtitle", "is_active"]
+        fields = ["id", "title", "name", "description", "quote", "icon", "is_active", "is_selected"]
 
 
 class BibleFamiliarityOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = BibleFamiliarityOption
-        fields = ["id", "option", "is_active"]
+        fields = ["id", "label", "text1", "text2", "title", "name", "caption", "is_active", "is_selected"]
 
 
 class BibleVersionOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = BibleVersionOption
-        fields = ["id", "title", "subtitle", "api_bible_id", "is_active"]
+        fields = ["id", "title", "subtitle", "api_bible_id", "is_active", "is_selected"]
 
 
 # =============================================
