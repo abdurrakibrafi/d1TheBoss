@@ -328,7 +328,6 @@ temp/
 # Custom project files (add your specific files here)
 test_playground.py
 code.py
-todo/
 
 # Local configuration files
 local_settings.py
