@@ -9,282 +9,288 @@ from apps.chat.services.ai_chat_core import AIChatCore
 from apps.chat.services.context_builder import ConversationManager
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-# from apps.aipersona.models import AIPersona
-# from apps.chat.models import ChatMessage, ChatSession
+from apps.chat.models import ChatMessage, ChatSession
 
 User = get_user_model()
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-    #     self.ai = AIChatCore()
-    #     self.conversation = None
-    #     self.user = None
-    #     self.room_group_name = None
-    #     self.persona = None
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ai = AIChatCore()
+        self.conversation = None
+        self.user = None
+        self.room_group_name = None
 
-    # def debug_json_serialization(self, data, context=""):
-    #     """Debug helper to find what's causing JSON serialization issues"""
-    #     try:
-    #         json.dumps(data)
-    #         print(f"{context}: JSON serialization OK")
-    #         return data
-    #     except TypeError as e:
-    #         print(f"{context}: JSON Error - {str(e)}")
-    #         print(f"Data type: {type(data)}")
-    #         if isinstance(data, dict):
-    #             for key, value in data.items():
-    #                 try:
-    #                     json.dumps(value)
-    #                 except TypeError:
-    #                     print(f"  Problem key: '{key}' = {value} (type: {type(value)})")
-    #         return data
+    def convert_decimals(self, obj):
+        """Convert Decimal objects to float for JSON serialization"""
+        if isinstance(obj, decimal.Decimal):
+            return float(obj)
+        elif isinstance(obj, dict):
+            return {k: self.convert_decimals(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self.convert_decimals(v) for v in obj]
+        return obj
 
-    # def convert_decimals(self, obj):
-    #     """Convert Decimal objects to float for JSON serialization"""
-    #     if isinstance(obj, decimal.Decimal):
-    #         return float(obj)
-    #     elif isinstance(obj, dict):
-    #         return {k: self.convert_decimals(v) for k, v in obj.items()}
-    #     elif isinstance(obj, list):
-    #         return [self.convert_decimals(v) for v in obj]
-    #     return obj
+    async def connect(self):
+        """Handle WebSocket connection"""
+        self.user = self.scope.get("user")
 
-    # async def connect(self):
-    #     self.user = self.scope.get("user")
+        if isinstance(self.user, AnonymousUser):
+            await self.close(code=4001)
+            return
 
-    #     if isinstance(self.user, AnonymousUser):
-    #         await self.close(code=4001)
-    #         return
+        # Get session_id from URL
+        self.session_id = self.scope["url_route"]["kwargs"].get("session_id")
 
-    #     # Read session_id from WebSocket URL (e.g. ws/chat/<session_id>/)
-    #     self.session_id = self.scope["url_route"]["kwargs"].get("session_id")
+        # Validate session exists for this user
+        if self.session_id:
+            try:
+                self.conversation = await database_sync_to_async(ConversationManager)(
+                    user=self.user, session_id=self.session_id
+                )
+            except Exception as e:
+                await self.close(code=4004)
+                return
 
-    #     # Optional: Validate the session exists for this user
-    #     if self.session_id:
-    #         try:
-    #             self.conversation = await database_sync_to_async(ConversationManager)(
-    #                 user=self.user, session_id=self.session_id
-    #             )
-    #         except Exception as e:
-    #             await self.close(code=4004)
-    #             return
+        # Join user-specific group
+        self.room_group_name = f"bible_chat_{self.user.id}"
+        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+        await self.accept()
 
-    #     # Join user-specific group
-    #     self.room_group_name = f"chat_{self.user.id}"
+        # Send connection confirmation
+        await self.send(json.dumps({
+            "type": "connection",
+            "message": "Connected to Bible Chat!",
+            "user_id": self.user.id,
+            "session_id": self.session_id,
+        }))
 
-    #     await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+    async def disconnect(self, close_code):
+        """Handle WebSocket disconnection"""
+        if self.conversation:
+            await database_sync_to_async(self.conversation.end_session)()
 
-    #     await self.accept()
+        if self.room_group_name:
+            await self.channel_layer.group_discard(
+                self.room_group_name, self.channel_name
+            )
 
-    #     await self.send(
-    #         json.dumps(
-    #             {
-    #                 "type": "connection",
-    #                 "message": "Connected successfully!",
-    #                 "user_id": self.user.id,
-    #                 "session_id": self.session_id,
-    #             }
-    #         )
-    #     )
+    async def receive(self, text_data):
+        """Handle incoming WebSocket messages"""
+        try:
+            data = json.loads(text_data)
+            message_type = data.get("type", "message")
 
-    # async def disconnect(self, close_code):
-    #     """Clean disconnect"""
-    #     if self.conversation:
-    #         await database_sync_to_async(self.conversation.end_session)()
+            if message_type == "message":
+                await self.handle_bible_chat_message(data)
+            elif message_type == "new_session":
+                await self.handle_new_session()
+            elif message_type == "get_sessions":
+                await self.handle_get_sessions()
+            elif message_type == "bookmark_message":
+                await self.handle_bookmark_message(data)
+            else:
+                await self.send_error("Unknown message type")
 
-    #     # Leave room group
-    #     if self.room_group_name:
-    #         await self.channel_layer.group_discard(
-    #             self.room_group_name, self.channel_name
-    #         )
+        except json.JSONDecodeError:
+            await self.send_error("Invalid JSON format")
+        except Exception as e:
+            await self.send_error(f"Unexpected error: {str(e)}")
 
-    # async def receive(self, text_data):
-    #     """Enhanced message processing with error handling and typing indicators"""
-    #     try:
-    #         data = json.loads(text_data)
-    #         message_type = data.get("type", "message")
+    async def handle_bible_chat_message(self, data):
+        """Process Bible chat message with AI response"""
+        try:
+            message = data.get("message", "").strip()
+            session_id = data.get("session_id")
 
-    #         if message_type == "message":
-    #             await self.handle_chat_message(data)
-    #         elif message_type == "new_session":
-    #             await self.handle_new_session()
-    #         elif message_type == "get_sessions":
-    #             await self.handle_get_sessions()
-    #         else:
-    #             await self.send_error("Unknown message type")
+            if not message:
+                await self.send_error("Message cannot be empty")
+                return
 
-    #     except json.JSONDecodeError:
-    #         await self.send_error("Invalid JSON format")
-    #     except Exception as e:
-    #         await self.send_error(f"Unexpected error: {str(e)}")
+            # Initialize or get conversation
+            if not self.conversation or (
+                session_id and str(self.conversation.session.id) != session_id
+            ):
+                self.conversation = await database_sync_to_async(ConversationManager)(
+                    user=self.user, session_id=session_id
+                )
 
-    # async def handle_chat_message(self, data):
-    #     """Process chat message with AI response"""
-    #     try:
-    #         message = data.get("message", "").strip()
-    #         session_id = data.get("session_id")
+            # Send typing indicator
+            await self.send(json.dumps({"type": "typing", "is_typing": True}))
 
-    #         if not message:
-    #             await self.send_error("Message cannot be empty")
-    #             return
+            # Add user message
+            user_message = await database_sync_to_async(self.conversation.add_message)(
+                content=message, is_user=True
+            )
 
-    #         # Initialize or get conversation
-    #         if not self.conversation or (
-    #             session_id and str(self.conversation.session.id) != session_id
-    #         ):
-    #             self.conversation = await database_sync_to_async(ConversationManager)(
-    #                 user=self.user, session_id=session_id
-    #             )
+            # Get conversation history and user context for AI
+            conversation_history = await database_sync_to_async(
+                self.conversation.format_for_ai
+            )()
+            
+            user_context = await database_sync_to_async(
+                self.conversation.get_user_spiritual_context
+            )()
 
-    #         # Send typing indicator
-    #         await self.send(json.dumps({"type": "typing", "is_typing": True}))
+            # Generate AI response
+            ai_response_data = await asyncio.get_event_loop().run_in_executor(
+                None, self._generate_bible_response, conversation_history, user_context
+            )
 
-    #         # Add user message to conversation
-    #         user_message = await database_sync_to_async(self.conversation.add_message)(
-    #             content=message, is_user=True
-    #         )
+            # Convert decimals for JSON serialization
+            ai_response_data = self.convert_decimals(ai_response_data)
 
-    #         # Get conversation history for AI
-    #         conversation_history = await database_sync_to_async(
-    #             self.conversation.format_for_ai
-    #         )()
+            # Stop typing indicator
+            await self.send(json.dumps({"type": "typing", "is_typing": False}))
 
-    #         # # Generate AI response (run in thread pool to avoid blocking)
-    #         # ai_response_data = await asyncio.get_event_loop().run_in_executor(
-    #         #     None, self.ai.generate_response, conversation_history, self.user
-    #         # )
+            if ai_response_data["success"]:
+                # Add AI response to conversation
+                ai_message = await database_sync_to_async(
+                    self.conversation.add_message
+                )(
+                    content=ai_response_data["content"],
+                    is_user=False,
+                    ai_metadata=ai_response_data,
+                )
 
-    #         session_persona = await database_sync_to_async(
-    #             lambda: self.conversation.session.persona
-    #         )()
+                # Update session context if available
+                if ai_response_data.get("conversation_context"):
+                    await database_sync_to_async(
+                        self.conversation.update_session_context
+                    )(ai_response_data["conversation_context"])
 
-    #         # Generate AI response WITH persona
-    #         ai_response_data = await asyncio.get_event_loop().run_in_executor(
-    #             None, self._generate_ai_response, conversation_history, session_persona
-    #         )
+                # Send response to client
+                response_data = {
+                    "type": "message",
+                    "content": ai_response_data["content"],
+                    "session_id": str(self.conversation.session.id),
+                    "message_id": ai_message.id,
+                    "tokens_used": ai_response_data.get("tokens_used", 0),
+                    "response_time": ai_response_data.get("response_time", 0),
+                    "model_used": ai_response_data.get("model_used", ""),
+                    "bible_references": ai_response_data.get("bible_references", []),
+                    "timestamp": ai_message.created_at.isoformat(),
+                }
 
-    #         self.debug_json_serialization(ai_response_data, "AI Response Data")
+                await self.send(json.dumps(response_data))
+            else:
+                await self.send_error(
+                    f"AI Error: {ai_response_data.get('error', 'Unknown error')}"
+                )
 
-    #         ai_response_data = self.convert_decimals(ai_response_data)
-    #         # Stop typing indicator
-    #         await self.send(json.dumps({"type": "typing", "is_typing": False}))
+        except Exception as e:
+            await self.send_error(f"Message processing error: {str(e)}")
 
-    #         if ai_response_data["success"]:
-    #             # Add AI response to conversation
-    #             ai_message = await database_sync_to_async(
-    #                 self.conversation.add_message
-    #             )(
-    #                 content=ai_response_data["content"],
-    #                 is_user=False,
-    #                 ai_metadata=ai_response_data,
-    #             )
+    async def handle_new_session(self):
+        """Create new Bible chat session"""
+        try:
+            self.conversation = await database_sync_to_async(ConversationManager)(
+                user=self.user
+            )
 
-    #             # Update session context if available
-    #             if ai_response_data.get("user_context"):
-    #                 await database_sync_to_async(
-    #                     self.conversation.update_session_context
-    #                 )(ai_response_data["user_context"])
+            session_summary = await database_sync_to_async(
+                self.conversation.get_session_summary
+            )()
 
-    #             # Create response data
-    #             response_data = {
-    #                 "type": "message",
-    #                 "content": ai_response_data["content"],
-    #                 "session_id": str(self.conversation.session.id),
-    #                 "message_id": ai_message.id,
-    #                 "tokens_used": ai_response_data.get("tokens_used", 0),
-    #                 "response_time": ai_response_data.get("response_time", 0),
-    #                 "model_used": ai_response_data.get("model_used", ""),
-    #                 "timestamp": ai_message.created_at.isoformat(),
-    #             }
+            session_summary = self.convert_decimals(session_summary)
 
-    #             # Send successful response
-    #             await self.send(json.dumps(response_data))
-    #         else:
-    #             # Send error response
-    #             await self.send_error(
-    #                 f"AI Error: {ai_response_data.get('error', 'Unknown error')}"
-    #             )
+            await self.send(json.dumps({
+                "type": "new_session", 
+                "session": session_summary
+            }))
 
-    #     except Exception as e:
-    #         await self.send_error(f"Message processing error: {str(e)}")
+        except Exception as e:
+            await self.send_error(f"Failed to create new session: {str(e)}")
 
-    # async def handle_new_session(self):
-    #     """Create new chat session"""
-    #     try:
-    #         self.conversation = await database_sync_to_async(ConversationManager)(
-    #             user=self.user
-    #         )
+    async def handle_get_sessions(self):
+        """Get user's Bible chat sessions"""
+        try:
+            sessions = await database_sync_to_async(self.get_user_sessions)()
+            sessions = self.convert_decimals(sessions)
 
-    #         session_summary = await database_sync_to_async(
-    #             self.conversation.get_session_summary
-    #         )()
+            await self.send(json.dumps({
+                "type": "sessions_list", 
+                "sessions": sessions
+            }))
+        except Exception as e:
+            await self.send_error(f"Failed to get sessions: {str(e)}")
 
-    #         session_summary = self.convert_decimals(session_summary)
+    async def handle_bookmark_message(self, data):
+        """Handle message bookmarking"""
+        try:
+            message_id = data.get("message_id")
+            bookmark_status = data.get("bookmark", True)
 
-    #         await self.send(
-    #             json.dumps({"type": "new_session", "session": session_summary})
-    #         )
+            if not message_id:
+                await self.send_error("Message ID required")
+                return
 
-    #     except Exception as e:
-    #         await self.send_error(f"Failed to create new session: {str(e)}")
+            success = await database_sync_to_async(self.toggle_bookmark)(
+                message_id, bookmark_status
+            )
 
-    # async def handle_get_sessions(self):
-    #     """Get user's chat sessions"""
-    #     try:
-    #         sessions = await database_sync_to_async(self.get_user_sessions)()
+            if success:
+                await self.send(json.dumps({
+                    "type": "bookmark_updated",
+                    "message_id": message_id,
+                    "bookmarked": bookmark_status
+                }))
+            else:
+                await self.send_error("Failed to update bookmark")
 
-    #         sessions = self.convert_decimals(sessions)
+        except Exception as e:
+            await self.send_error(f"Bookmark error: {str(e)}")
 
-    #         await self.send(json.dumps({"type": "sessions_list", "sessions": sessions}))
-    #     except Exception as e:
-    #         await self.send_error(f"Failed to get sessions: {str(e)}")
+    def get_user_sessions(self):
+        """Get user's recent Bible chat sessions"""
+        sessions = ChatSession.objects.filter(
+            user=self.user, 
+            is_active=True
+        ).order_by("-updated_at")[:10]
 
-    # def get_user_sessions(self):
-    #     """Get user's recent chat sessions"""
+        return [{
+            "id": str(session.id),
+            "title": session.title,
+            "message_count": session.message_count,
+            "tokens_used": session.tokens_used,
+            "created_at": session.created_at.isoformat(),
+            "updated_at": session.updated_at.isoformat(),
+        } for session in sessions]
 
-    #     sessions = ChatSession.objects.filter(user=self.user, is_active=True).order_by(
-    #         "-updated_at"
-    #     )[:10]
+    def toggle_bookmark(self, message_id, bookmark_status):
+        """Toggle message bookmark status"""
+        try:
+            message = ChatMessage.objects.get(
+                id=message_id, 
+                session__user=self.user
+            )
+            message.bookmark = bookmark_status
+            message.save()
+            return True
+        except ChatMessage.DoesNotExist:
+            return False
 
-    #     return [
-    #         {
-    #             "id": str(session.id),
-    #             "title": session.title,
-    #             "message_count": session.message_count,
-    #             "tokens_used": session.tokens_used,
-    #             "created_at": session.created_at.isoformat(),
-    #             "updated_at": session.updated_at.isoformat(),
-    #         }
-    #         for session in sessions
-    #     ]
+    async def send_error(self, message: str):
+        """Send error message to client"""
+        await self.send(json.dumps({
+            "type": "error",
+            "message": message,
+            "timestamp": timezone.now().isoformat(),
+        }))
 
-    # async def send_error(self, message: str):
-    #     """Send error message to client"""
-    #     await self.send(
-    #         json.dumps(
-    #             {
-    #                 "type": "error",
-    #                 "message": message,
-    #                 "timestamp": timezone.now().isoformat(),
-    #             }
-    #         )
-    #     )
+    def _generate_bible_response(self, conversation_history, user_context):
+        """Helper to call AI service with Bible context"""
+        return self.ai.generate_bible_response(
+            conversation_history=conversation_history,
+            user=self.user,
+            user_context=user_context
+        )
 
-    # def _generate_ai_response(self, conversation_history, persona):
-    #     """Helper to call AI service with persona"""
-    #     return self.ai.generate_response(
-    #         conversation_history=conversation_history,
-    #         user=self.user,
-    #         persona=persona
-    #     )
-
-
-    # # Handle group messages (for future features like notifications)
-    # async def chat_message(self, event):
-    #     """Handle messages sent to the group"""
-    #     await self.send(
-    #         json.dumps({"type": "notification", "message": event["message"]})
-    #     )
-    pass
+    # Handle group messages (for future features like notifications)
+    async def chat_message(self, event):
+        """Handle messages sent to the group"""
+        await self.send(json.dumps({
+            "type": "notification", 
+            "message": event["message"]
+        }))

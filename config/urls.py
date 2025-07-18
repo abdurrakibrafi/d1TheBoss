@@ -31,6 +31,7 @@ urlpatterns = [
     path("api/core/", include("apps.core.urls")),
     path("api/onboarding/", include("apps.onboarding.urls")),
     path("api/bible/", include("apps.bible.urls")),
+    path("api/chat/", include("apps.chat.urls")),
 ]
 
 
