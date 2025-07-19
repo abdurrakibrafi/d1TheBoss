@@ -17,6 +17,7 @@ class ChatSession(models.Model):
     title = models.CharField(max_length=200, blank=True)
     context_snapshot = models.JSONField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
+    is_favorite = models.BooleanField(default=False)
 
     message_count = models.PositiveIntegerField(default=0)
     tokens_used = models.PositiveIntegerField(default=0)
@@ -25,7 +26,11 @@ class ChatSession(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"ChatSession {self.id} - User: {self.user.email}"
+        if self.user:
+            user_email = self.user.email or f"User #{self.user.pk}"
+        else:
+            user_email = "Anonymous"
+        return f"ChatSession {self.pk} - User: {user_email}"
 
 
 class ChatMessage(models.Model):
@@ -51,4 +56,5 @@ class ChatMessage(models.Model):
         verbose_name_plural = "Chat Messages"
 
     def __str__(self):
-        return f"{'User' if self.is_user else 'AI'}: {self.content[:50]}..."
+        content = self.content or "(No content)"
+        return f"{'User' if self.is_user else 'AI'}: {content[:50]}..."

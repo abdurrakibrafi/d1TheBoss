@@ -30,11 +30,9 @@ class JourneyReason(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.user.email} - {self.journey_reason.option}"  # FIX THIS
-
-    class Meta:
-        ordering = ["created_at"]
-        verbose_name_plural = "02. Journey Reasons"
+        user_email = self.user.email if self.user else "Unknown User"
+        journey_option = self.journey_reason.option if self.journey_reason else "No Journey Reason"
+        return f"{user_email} - {journey_option}"
 
 
 class DenominationOption(models.Model):
@@ -68,7 +66,7 @@ class Denomination(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.name
+        return self.name or f"Denomination #{self.pk}"
 
     class Meta:
         ordering = ["created_at"]
@@ -169,7 +167,9 @@ class TonePreference(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.tone_preference_option.title
+        if self.tone_preference_option and self.tone_preference_option.title:
+            return self.tone_preference_option.title
+        return f"TonePreference #{self.pk}"
 
     class Meta:
         ordering = ["created_at"]
@@ -212,7 +212,9 @@ class BibleFamiliarity(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.bible_familiarity_option.label}"
+        if self.bible_familiarity_option and self.bible_familiarity_option.label:
+            return self.bible_familiarity_option.label
+        return f"BibleFamiliarity #{self.pk}"
 
     class Meta:
         ordering = ["created_at"]
@@ -252,7 +254,9 @@ class BibleVersion(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.bible_version_option.title}"
+        if self.bible_version_option and self.bible_version_option.title:
+            return self.bible_version_option.title
+        return f"BibleVersion #{self.pk}"
 
     class Meta:
         ordering = ["created_at"]

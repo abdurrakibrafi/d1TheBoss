@@ -11,10 +11,10 @@ urlpatterns = [
     # Session management
     path('sessions/', ChatSessionListView.as_view(), name='chat-session-list'),
     path('sessions/create/', CreateChatSessionView.as_view(), name='chat-session-create'),
-    path('sessions/<uuid:pk>/', ChatSessionDetailView.as_view(), name='chat-session-detail'),
-    path('sessions/<uuid:pk>/update/', ChatSessionUpdateView.as_view(), name='chat-session-update'),
-    path('sessions/<uuid:pk>/delete/', ChatSessionDeleteView.as_view(), name='chat-session-delete'),
-    path('sessions/<uuid:pk>/favorite/', FavoriteChatSessionView.as_view(), name='chat-session-favorite'),
+    path('sessions/<int:pk>/', ChatSessionDetailView.as_view(), name='chat-session-detail'),
+    path('sessions/<int:pk>/update/', ChatSessionUpdateView.as_view(), name='chat-session-update'),
+    path('sessions/<int:pk>/delete/', ChatSessionDeleteView.as_view(), name='chat-session-delete'),
+    path('sessions/<int:session_id>/favorite/', FavoriteChatSessionView.as_view(), name='chat-session-favorite'),
     
     # Message management
     path('messages/<int:message_id>/bookmark/', BookmarkMessageView.as_view(), name='bookmark-message'),

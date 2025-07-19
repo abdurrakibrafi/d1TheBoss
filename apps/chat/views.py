@@ -6,103 +6,43 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.utils import timezone
-from django.db import transaction
+from django.db import transaction, models
 from apps.chat.models import ChatSession, ChatMessage
 from apps.chat.services.ai_chat_core import AIChatCore
 from apps.chat.services.context_builder import ConversationManager
 from rest_framework import serializers
 import asyncio
 import json
-
-
-# Serializers
-class ChatMessageSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ChatMessage
-        fields = [
-            'id', 'content', 'is_user', 'bookmark', 'model_used', 
-            'tokens_consumed', 'response_time', 'ai_metadata', 
-            'created_at', 'updated_at'
-        ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
-
-
-class ChatSessionSerializer(serializers.ModelSerializer):
-    message_count = serializers.ReadOnlyField()
-    last_message_at = serializers.SerializerMethodField()
-    is_favorite = serializers.BooleanField(default=False)
-    
-    class Meta:
-        model = ChatSession
-        fields = [
-            'id', 'title', 'is_active', 'message_count', 'tokens_used',
-            'created_at', 'updated_at', 'last_message_at', 'is_favorite'
-        ]
-        read_only_fields = ['id', 'message_count', 'tokens_used', 'created_at', 'updated_at']
-    
-    def get_last_message_at(self, obj):
-        last_message = obj.messages.last()
-        return last_message.created_at if last_message else obj.created_at
-
-
-class ChatSessionDetailSerializer(serializers.ModelSerializer):
-    messages = ChatMessageSerializer(many=True, read_only=True)
-    spiritual_context = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = ChatSession
-        fields = [
-            'id', 'title', 'is_active', 'message_count', 'tokens_used',
-            'created_at', 'updated_at', 'messages', 'spiritual_context', 'is_favorite'
-        ]
-    
-    def get_spiritual_context(self, obj):
-        context = {}
-        if obj.journey_reason:
-            context['journey_reason'] = obj.journey_reason.journey_reason.option
-        if obj.denomination:
-            context['denomination'] = obj.denomination.denomination_option.name if obj.denomination.denomination_option else obj.denomination.name
-        if obj.faith_goal:
-            context['faith_goal'] = obj.faith_goal.faith_goal_option.option if obj.faith_goal.faith_goal_option else obj.faith_goal.text
-        if obj.tone_preference:
-            context['tone_preference'] = obj.tone_preference.tone_preference_option.name
-        if obj.bible_familiarity:
-            context['bible_familiarity'] = obj.bible_familiarity.bible_familiarity_option.label
-        if obj.bible_version:
-            context['bible_version'] = obj.bible_version.bible_version_option.title
-        return context
+from apps.core.utils.mixins import BaseResponseMixin
+from apps.chat.serializers import ChatMessageSerializer, ChatSessionSerializer, ChatSessionDetailSerializer
 
 
 # API Views
-class CreateChatSessionView(generics.CreateAPIView):
+class CreateChatSessionView(BaseResponseMixin, APIView):
     """Create a new chat session for the authenticated user"""
-    serializer_class = ChatSessionSerializer
     permission_classes = [IsAuthenticated]
     
-    def perform_create(self, serializer):
-        # Create conversation manager to handle onboarding data
-        conversation_manager = ConversationManager(user=self.request.user)
-        
-        # Get user's spiritual context
-        user_context = conversation_manager.get_user_spiritual_context()
-        
-        # Generate session title
-        title = self._generate_session_title(user_context)
-        
-        # Create session with all onboarding data
-        session = serializer.save(
-            user=self.request.user,
-            title=title,
-            context_snapshot=user_context,
-            journey_reason=conversation_manager._get_user_journey_reason(),
-            denomination=conversation_manager._get_user_denomination(),
-            faith_goal=conversation_manager._get_user_faith_goal(),
-            tone_preference=conversation_manager._get_user_tone_preference(),
-            bible_familiarity=conversation_manager._get_user_bible_familiarity(),
-            bible_version=conversation_manager._get_user_bible_version(),
-        )
-        
-        return session
+    def post(self, request):
+        try:
+            print(f"CreateChatSessionView called by {request.user}")
+
+            # Let ConversationManager handle session creation (it already does this correctly)
+            conversation_manager = ConversationManager(user=request.user)
+            
+            # Get the session that ConversationManager already created
+            session = conversation_manager.session
+            
+            print(f"Created new chat session: {session.id} for user {request.user.email}")
+            
+            # Serialize and return
+            serializer = ChatSessionSerializer(session)
+            return self.created_response(
+                data=serializer.data,
+                message="Chat session created successfully"
+            )
+            
+        except Exception as e:
+            return self.handle_exception(e)
     
     def _generate_session_title(self, user_context):
         """Generate meaningful session title"""
@@ -117,7 +57,7 @@ class CreateChatSessionView(generics.CreateAPIView):
             return f"Bible Conversation - {timezone.now().strftime('%B %d')}"
 
 
-class ChatSessionListView(generics.ListAPIView):
+class ChatSessionListView(BaseResponseMixin, generics.ListAPIView):
     """List all chat sessions for the authenticated user"""
     serializer_class = ChatSessionSerializer
     permission_classes = [IsAuthenticated]
@@ -135,8 +75,19 @@ class ChatSessionListView(generics.ListAPIView):
         
         return queryset
 
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            return self.success_response(
+                data=serializer.data,
+                message="Chat sessions retrieved successfully"
+            )
+        except Exception as e:
+            return self.handle_exception(e)
 
-class ChatSessionDetailView(generics.RetrieveAPIView):
+
+class ChatSessionDetailView(BaseResponseMixin, generics.RetrieveAPIView):
     """Get detailed chat session with all messages"""
     serializer_class = ChatSessionDetailSerializer
     permission_classes = [IsAuthenticated]
@@ -144,8 +95,19 @@ class ChatSessionDetailView(generics.RetrieveAPIView):
     def get_queryset(self):
         return ChatSession.objects.filter(user=self.request.user)
 
+    def retrieve(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return self.success_response(
+                data=serializer.data,
+                message="Chat session retrieved successfully"
+            )
+        except Exception as e:
+            return self.handle_exception(e)
 
-class ChatSessionUpdateView(generics.UpdateAPIView):
+
+class ChatSessionUpdateView(BaseResponseMixin, generics.UpdateAPIView):
     """Update chat session (title, favorite status, etc.)"""
     serializer_class = ChatSessionSerializer
     permission_classes = [IsAuthenticated]
@@ -153,8 +115,28 @@ class ChatSessionUpdateView(generics.UpdateAPIView):
     def get_queryset(self):
         return ChatSession.objects.filter(user=self.request.user)
 
+    def update(self, request, *args, **kwargs):
+        try:
+            partial = kwargs.pop('partial', False)
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data, partial=partial)
+            
+            if serializer.is_valid():
+                self.perform_update(serializer)
+                return self.updated_response(
+                    data=serializer.data,
+                    message="Chat session updated successfully"
+                )
+            else:
+                return self.bad_request_response(
+                    message="Invalid data provided",
+                    errors=serializer.errors
+                )
+        except Exception as e:
+            return self.handle_exception(e)
 
-class ChatSessionDeleteView(generics.DestroyAPIView):
+
+class ChatSessionDeleteView(BaseResponseMixin, generics.DestroyAPIView):
     """Delete a chat session"""
     permission_classes = [IsAuthenticated]
     
@@ -166,8 +148,18 @@ class ChatSessionDeleteView(generics.DestroyAPIView):
         instance.is_active = False
         instance.save()
 
+    def destroy(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            self.perform_destroy(instance)
+            return self.success_response(
+                message="Chat session deleted successfully",
+                status_code=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return self.handle_exception(e)
 
-class BookmarkMessageView(APIView):
+class BookmarkMessageView(BaseResponseMixin, APIView):
     """Bookmark/unbookmark a specific message"""
     permission_classes = [IsAuthenticated]
     
@@ -182,21 +174,21 @@ class BookmarkMessageView(APIView):
             message.bookmark = bookmark_status
             message.save()
             
-            return Response({
-                'success': True,
-                'message_id': message_id,
-                'bookmarked': bookmark_status,
-                'message': f"Message {'bookmarked' if bookmark_status else 'unbookmarked'} successfully"
-            })
+            return self.success_response(
+                data={
+                    'message_id': message_id,
+                    'bookmarked': bookmark_status
+                },
+                message=f"Message {'bookmarked' if bookmark_status else 'unbookmarked'} successfully"
+            )
             
         except ChatMessage.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'Message not found'
-            }, status=status.HTTP_404_NOT_FOUND)
+            return self.not_found_response(message="Message not found")
+        except Exception as e:
+            return self.handle_exception(e)
 
 
-class BookmarkedMessagesView(generics.ListAPIView):
+class BookmarkedMessagesView(BaseResponseMixin, generics.ListAPIView):
     """List all bookmarked messages for the user"""
     serializer_class = ChatMessageSerializer
     permission_classes = [IsAuthenticated]
@@ -207,8 +199,19 @@ class BookmarkedMessagesView(generics.ListAPIView):
             bookmark=True
         ).order_by('-created_at')
 
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            return self.success_response(
+                data=serializer.data,
+                message="Bookmarked messages retrieved successfully"
+            )
+        except Exception as e:
+            return self.handle_exception(e)
 
-class RegenerateResponseView(APIView):
+
+class RegenerateResponseView(BaseResponseMixin, APIView):
     """Regenerate AI response for a specific message"""
     permission_classes = [IsAuthenticated]
     
@@ -253,25 +256,27 @@ class RegenerateResponseView(APIView):
                 ai_message.session.tokens_used += ai_response_data.get("tokens_used", 0)
                 ai_message.session.save()
                 
-                return Response({
-                    'success': True,
-                    'message': ChatMessageSerializer(ai_message).data,
-                    'regenerated': True
-                })
+                return self.success_response(
+                    data={
+                        'message': ChatMessageSerializer(ai_message).data,
+                        'regenerated': True
+                    },
+                    message="Response regenerated successfully"
+                )
             else:
-                return Response({
-                    'success': False,
-                    'error': ai_response_data.get('error', 'Failed to regenerate response')
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return self.error_response(
+                    message=ai_response_data.get('error', 'Failed to regenerate response'),
+                    error_code="REGENERATION_FAILED",
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
                 
         except ChatMessage.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'Message not found'
-            }, status=status.HTTP_404_NOT_FOUND)
+            return self.not_found_response(message="Message not found")
+        except Exception as e:
+            return self.handle_exception(e)
 
 
-class SearchChatHistoryView(generics.ListAPIView):
+class SearchChatHistoryView(BaseResponseMixin, generics.ListAPIView):
     """Search through all chat history for specific text"""
     serializer_class = ChatMessageSerializer
     permission_classes = [IsAuthenticated]
@@ -303,8 +308,23 @@ class SearchChatHistoryView(generics.ListAPIView):
         
         return queryset
 
+    def list(self, request, *args, **kwargs):
+        try:
+            query = request.query_params.get('q', '')
+            if not query:
+                return self.bad_request_response(message="Search query parameter 'q' is required")
+            
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            return self.success_response(
+                data=serializer.data,
+                message=f"Search results for '{query}' retrieved successfully"
+            )
+        except Exception as e:
+            return self.handle_exception(e)
 
-class FavoriteChatSessionView(APIView):
+
+class FavoriteChatSessionView(BaseResponseMixin, APIView):
     """Mark/unmark chat session as favorite"""
     permission_classes = [IsAuthenticated]
     
@@ -319,21 +339,21 @@ class FavoriteChatSessionView(APIView):
             session.is_favorite = favorite_status
             session.save()
             
-            return Response({
-                'success': True,
-                'session_id': session_id,
-                'is_favorite': favorite_status,
-                'message': f"Session {'marked as favorite' if favorite_status else 'removed from favorites'} successfully"
-            })
+            return self.success_response(
+                data={
+                    'session_id': session_id,
+                    'is_favorite': favorite_status
+                },
+                message=f"Session {'marked as favorite' if favorite_status else 'removed from favorites'} successfully"
+            )
             
         except ChatSession.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'Session not found'
-            }, status=status.HTTP_404_NOT_FOUND)
+            return self.not_found_response(message="Session not found")
+        except Exception as e:
+            return self.handle_exception(e)
 
 
-class NeedMoreClarityView(APIView):
+class NeedMoreClarityView(BaseResponseMixin, APIView):
     """Handle "Need more clarity?" feedback on AI responses"""
     permission_classes = [IsAuthenticated]
     
@@ -394,96 +414,109 @@ Please provide a clearer, more detailed explanation that addresses potential con
                         ai_metadata=clarification_response
                     )
                     
-                    return Response({
-                        'success': True,
-                        'needs_clarity': needs_clarity,
-                        'clarification_provided': True,
-                        'clarification_message': ChatMessageSerializer(clarification_message).data
-                    })
+                    return self.success_response(
+                        data={
+                            'needs_clarity': needs_clarity,
+                            'clarification_provided': True,
+                            'clarification_message': ChatMessageSerializer(clarification_message).data
+                        },
+                        message="Clarification provided successfully"
+                    )
             
-            return Response({
-                'success': True,
-                'needs_clarity': needs_clarity,
-                'clarification_provided': False,
-                'message': 'Feedback recorded successfully'
-            })
+            return self.success_response(
+                data={
+                    'needs_clarity': needs_clarity,
+                    'clarification_provided': False
+                },
+                message="Feedback recorded successfully"
+            )
             
         except ChatMessage.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'Message not found'
-            }, status=status.HTTP_404_NOT_FOUND)
+            return self.not_found_response(message="Message not found")
+        except Exception as e:
+            return self.handle_exception(e)
 
 
-class ChatStatisticsView(APIView):
+class ChatStatisticsView(BaseResponseMixin, APIView):
     """Get user's chat statistics"""
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        user_sessions = ChatSession.objects.filter(
-            user=request.user,
-            is_active=True
-        )
-        
-        user_messages = ChatMessage.objects.filter(
-            session__user=request.user,
-            session__is_active=True
-        )
-        
-        stats = {
-            'total_sessions': user_sessions.count(),
-            'favorite_sessions': user_sessions.filter(is_favorite=True).count(),
-            'total_messages': user_messages.count(),
-            'user_messages': user_messages.filter(is_user=True).count(),
-            'ai_messages': user_messages.filter(is_user=False).count(),
-            'bookmarked_messages': user_messages.filter(bookmark=True).count(),
-            'total_tokens_used': user_sessions.aggregate(total=models.Sum('tokens_used'))['total'] or 0,
-            'average_session_length': user_sessions.aggregate(avg=Avg('message_count'))['avg'] or 0,
-            'recent_activity': user_sessions.order_by('-updated_at')[:5].values(
-                'id', 'title', 'updated_at', 'message_count'
+        try:
+            user_sessions = ChatSession.objects.filter(
+                user=request.user,
+                is_active=True
             )
-        }
-        
-        return Response(stats)
+            
+            user_messages = ChatMessage.objects.filter(
+                session__user=request.user,
+                session__is_active=True
+            )
+            
+            stats = {
+                'total_sessions': user_sessions.count(),
+                'favorite_sessions': user_sessions.filter(is_favorite=True).count(),
+                'total_messages': user_messages.count(),
+                'user_messages': user_messages.filter(is_user=True).count(),
+                'ai_messages': user_messages.filter(is_user=False).count(),
+                'bookmarked_messages': user_messages.filter(bookmark=True).count(),
+                'total_tokens_used': user_sessions.aggregate(total=models.Sum('tokens_used'))['total'] or 0,
+                'average_session_length': user_sessions.aggregate(avg=Avg('message_count'))['avg'] or 0,
+                'recent_activity': user_sessions.order_by('-updated_at')[:5].values(
+                    'id', 'title', 'updated_at', 'message_count'
+                )
+            }
+            
+            return self.success_response(
+                data=stats,
+                message="Chat statistics retrieved successfully"
+            )
+        except Exception as e:
+            return self.handle_exception(e)
 
 
-class ExportChatHistoryView(APIView):
+class ExportChatHistoryView(BaseResponseMixin, APIView):
     """Export chat history as JSON"""
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        sessions = ChatSession.objects.filter(
-            user=request.user,
-            is_active=True
-        ).prefetch_related('messages')
-        
-        export_data = {
-            'user_id': request.user.id,
-            'export_date': timezone.now().isoformat(),
-            'sessions': []
-        }
-        
-        for session in sessions:
-            session_data = {
-                'id': str(session.id),
-                'title': session.title,
-                'created_at': session.created_at.isoformat(),
-                'updated_at': session.updated_at.isoformat(),
-                'is_favorite': session.is_favorite,
-                'messages': []
+        try:
+            sessions = ChatSession.objects.filter(
+                user=request.user,
+                is_active=True
+            ).prefetch_related('messages')
+            
+            export_data = {
+                'user_id': request.user.id,
+                'export_date': timezone.now().isoformat(),
+                'sessions': []
             }
             
-            for message in session.messages.all():
-                message_data = {
-                    'id': message.id,
-                    'content': message.content,
-                    'is_user': message.is_user,
-                    'bookmark': message.bookmark,
-                    'created_at': message.created_at.isoformat(),
+            for session in sessions:
+                session_data = {
+                    'id': str(session.id),
+                    'title': session.title,
+                    'created_at': session.created_at.isoformat(),
+                    'updated_at': session.updated_at.isoformat(),
+                    'is_favorite': session.is_favorite,
+                    'messages': []
                 }
-                session_data['messages'].append(message_data)
+                
+                for message in session.messages.all():
+                    message_data = {
+                        'id': message.id,
+                        'content': message.content,
+                        'is_user': message.is_user,
+                        'bookmark': message.bookmark,
+                        'created_at': message.created_at.isoformat(),
+                    }
+                    session_data['messages'].append(message_data)
+                
+                export_data['sessions'].append(session_data)
             
-            export_data['sessions'].append(session_data)
-        
-        return Response(export_data)
-
+            return self.success_response(
+                data=export_data,
+                message="Chat history exported successfully"
+            )
+        except Exception as e:
+            return self.handle_exception(e)

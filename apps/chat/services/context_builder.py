@@ -133,42 +133,42 @@ class ConversationManager:
     def _get_user_journey_reason(self) -> Optional[JourneyReason]:
         """Get user's journey reason"""
         try:
-            return JourneyReason.objects.get(user=self.user)
+            return JourneyReason.objects.filter(user=self.user).first()  # Changed from .get() to .filter().first()
         except JourneyReason.DoesNotExist:
             return None
 
     def _get_user_denomination(self) -> Optional[Denomination]:
         """Get user's denomination"""
         try:
-            return Denomination.objects.get(user=self.user)
+            return Denomination.objects.filter(user=self.user).first()  # Changed
         except Denomination.DoesNotExist:
             return None
 
     def _get_user_faith_goal(self) -> Optional[FaithGoal]:
         """Get user's faith goal"""
         try:
-            return FaithGoal.objects.get(user=self.user)
+            return FaithGoal.objects.filter(user=self.user).first()  # Changed - THIS IS THE MAIN ERROR
         except FaithGoal.DoesNotExist:
             return None
 
     def _get_user_tone_preference(self) -> Optional[TonePreference]:
         """Get user's tone preference"""
         try:
-            return TonePreference.objects.get(user=self.user)
+            return TonePreference.objects.filter(user=self.user).first()  # Changed
         except TonePreference.DoesNotExist:
             return None
 
     def _get_user_bible_familiarity(self) -> Optional[BibleFamiliarity]:
         """Get user's Bible familiarity"""
         try:
-            return BibleFamiliarity.objects.get(user=self.user)
+            return BibleFamiliarity.objects.filter(user=self.user).first()  # Changed
         except BibleFamiliarity.DoesNotExist:
             return None
 
     def _get_user_bible_version(self) -> Optional[BibleVersion]:
         """Get user's preferred Bible version"""
         try:
-            return BibleVersion.objects.get(user=self.user)
+            return BibleVersion.objects.filter(user=self.user).first()  # Changed
         except BibleVersion.DoesNotExist:
             return None
 
