@@ -8,15 +8,15 @@ from apps.chat.views import (
 )
 
 urlpatterns = [
-    # Session management
+    # Session management - UUID
     path('sessions/', ChatSessionListView.as_view(), name='chat-session-list'),
     path('sessions/create/', CreateChatSessionView.as_view(), name='chat-session-create'),
-    path('sessions/<int:pk>/', ChatSessionDetailView.as_view(), name='chat-session-detail'),
-    path('sessions/<int:pk>/update/', ChatSessionUpdateView.as_view(), name='chat-session-update'),
-    path('sessions/<int:pk>/delete/', ChatSessionDeleteView.as_view(), name='chat-session-delete'),
-    path('sessions/<int:session_id>/favorite/', FavoriteChatSessionView.as_view(), name='chat-session-favorite'),
+    path('sessions/<uuid:pk>/', ChatSessionDetailView.as_view(), name='chat-session-detail'),
+    path('sessions/<uuid:pk>/update/', ChatSessionUpdateView.as_view(), name='chat-session-update'),
+    path('sessions/<uuid:pk>/delete/', ChatSessionDeleteView.as_view(), name='chat-session-delete'),
+    path('sessions/<uuid:session_id>/favorite/', FavoriteChatSessionView.as_view(), name='chat-session-favorite'),
     
-    # Message management
+    # Message management - INTEGER (keeps <int:message_id>)
     path('messages/<int:message_id>/bookmark/', BookmarkMessageView.as_view(), name='bookmark-message'),
     path('messages/<int:message_id>/regenerate/', RegenerateResponseView.as_view(), name='regenerate-response'),
     path('messages/<int:message_id>/clarity/', NeedMoreClarityView.as_view(), name='need-more-clarity'),

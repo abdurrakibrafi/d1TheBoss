@@ -7,6 +7,7 @@ class ChatSession(models.Model):
     """
     Represents a chat session between a user and the AI.
     """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True)
     journey_reason = models.ForeignKey(JourneyReason, on_delete=models.CASCADE, blank=True, null=True)
     denomination = models.ForeignKey(Denomination, on_delete=models.CASCADE, blank=True, null=True)
