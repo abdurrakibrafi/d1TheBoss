@@ -483,7 +483,6 @@ class ExportChatHistoryView(BaseResponseMixin, APIView):
         try:
             sessions = ChatSession.objects.filter(
                 user=request.user,
-                is_active=True
             ).prefetch_related('messages')
             
             export_data = {
