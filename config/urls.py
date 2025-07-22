@@ -30,6 +30,7 @@ urlpatterns = [
     path("api/auth/", include("apps.accounts.urls")),
     path("api/core/", include("apps.core.urls")),
     path("api/onboarding/", include("apps.onboarding.urls")),
+    path("api/homepage/", include("apps.homepage.urls")),
     path("api/bible/", include("apps.bible.urls")),
     path("api/chat/", include("apps.chat.urls")),
 ]
