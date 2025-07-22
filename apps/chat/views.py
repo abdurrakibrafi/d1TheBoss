@@ -96,7 +96,6 @@ class ChatSessionDetailView(BaseResponseMixin, APIView):
             session = ChatSession.objects.get(
                 id=session_id,
                 user=request.user,
-                is_active=True
             )
             
             serializer = ChatSessionDetailSerializer(session)
