@@ -4,9 +4,10 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from apps.homepage.services.home_page_bible_api import DailyVerseService
-from .serializers import DailyVerseSerializer
+from .serializers import DailyVerseSerializer 
+from apps.core.utils.mixins import BaseResponseMixin
 
-class DailyVerseView(APIView):
+class DailyVerseView(BaseResponseMixin, APIView):
     """
     Get daily verse for authenticated user
     - Same verse for 24 hours
@@ -23,20 +24,18 @@ class DailyVerseView(APIView):
             
             message = "Current daily verse retrieved" if not daily_verse.is_expired() else "New daily verse generated"
             
-            return Response({
-                'success': True,
+            return self.success_response({
                 'message': message,
                 'data': serializer.data
             })
             
         except Exception as e:
-            return Response({
-                'success': False,
+            return self.error_response({
                 'message': f'Error retrieving daily verse: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class RefreshDailyVerseView(APIView):
+class RefreshDailyVerseView(BaseResponseMixin, APIView):
     """
     Force refresh daily verse (for testing purposes)
     """
@@ -48,14 +47,12 @@ class RefreshDailyVerseView(APIView):
             daily_verse = service.force_refresh_verse()
             serializer = DailyVerseSerializer(daily_verse)
             
-            return Response({
-                'success': True,
+            return self.success_response({
                 'message': 'Daily verse refreshed successfully',
                 'data': serializer.data
             })
             
         except Exception as e:
-            return Response({
-                'success': False,
+            return self.error_response({
                 'message': f'Error refreshing daily verse: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
