@@ -11,9 +11,9 @@ urlpatterns = [
     # Session management - UUID
     path('sessions/', ChatSessionListView.as_view(), name='chat-session-list'),
     path('sessions/create/', CreateChatSessionView.as_view(), name='chat-session-create'),
-    path('sessions/<uuid:pk>/', ChatSessionDetailView.as_view(), name='chat-session-detail'),
-    path('sessions/<uuid:pk>/update/', ChatSessionUpdateView.as_view(), name='chat-session-update'),
-    path('sessions/<uuid:pk>/delete/', ChatSessionDeleteView.as_view(), name='chat-session-delete'),
+    path('sessions/<uuid:session_id>/', ChatSessionDetailView.as_view(), name='chat-session-detail'),
+    path('sessions/<uuid:session_id>/update/', ChatSessionUpdateView.as_view(), name='chat-session-update'),
+    path('sessions/<uuid:session_id>/delete/', ChatSessionDeleteView.as_view(), name='chat-session-delete'),
     path('sessions/<uuid:session_id>/favorite/', FavoriteChatSessionView.as_view(), name='chat-session-favorite'),
     
     # Message management - INTEGER (keeps <int:message_id>)

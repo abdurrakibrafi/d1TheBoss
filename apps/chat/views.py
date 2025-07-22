@@ -87,30 +87,36 @@ class ChatSessionListView(BaseResponseMixin, generics.ListAPIView):
             return self.handle_exception(e)
 
 
-class ChatSessionDetailView(BaseResponseMixin, generics.RetrieveAPIView):
+class ChatSessionDetailView(BaseResponseMixin, APIView):
     """Get detailed chat session with all messages"""
-    serializer_class = ChatSessionDetailSerializer
     permission_classes = [IsAuthenticated]
     
-    def get_queryset(self):
-        return ChatSession.objects.filter(user=self.request.user)
-
-    def retrieve(self, request, *args, **kwargs):
+    def get(self, request, session_id):
         try:
-            instance = self.get_object()
-            serializer = self.get_serializer(instance)
+            session = ChatSession.objects.get(
+                id=session_id,
+                user=request.user,
+                is_active=True
+            )
+            
+            serializer = ChatSessionDetailSerializer(session)
             return self.success_response(
                 data=serializer.data,
                 message="Chat session retrieved successfully"
             )
+            
+        except ChatSession.DoesNotExist:
+            return self.not_found_response(message="Session not found")
         except Exception as e:
             return self.handle_exception(e)
-
+        
 
 class ChatSessionUpdateView(BaseResponseMixin, generics.UpdateAPIView):
     """Update chat session (title, favorite status, etc.)"""
     serializer_class = ChatSessionSerializer
     permission_classes = [IsAuthenticated]
+    lookup_field = 'id'  # Add this
+    lookup_url_kwarg = 'session_id' 
     
     def get_queryset(self):
         return ChatSession.objects.filter(user=self.request.user)
@@ -136,26 +142,27 @@ class ChatSessionUpdateView(BaseResponseMixin, generics.UpdateAPIView):
             return self.handle_exception(e)
 
 
-class ChatSessionDeleteView(BaseResponseMixin, generics.DestroyAPIView):
+class ChatSessionDeleteView(BaseResponseMixin, APIView):
     """Delete a chat session"""
     permission_classes = [IsAuthenticated]
     
-    def get_queryset(self):
-        return ChatSession.objects.filter(user=self.request.user)
-    
-    def perform_destroy(self, instance):
-        # Soft delete - mark as inactive
-        instance.is_active = False
-        instance.save()
-
-    def destroy(self, request, *args, **kwargs):
+    def delete(self, request, session_id):
         try:
-            instance = self.get_object()
-            self.perform_destroy(instance)
+            session = ChatSession.objects.get(
+                id=session_id,
+                user=request.user
+            )
+            
+            # Hard delete - completely remove the session and all related messages
+            session.delete()
+            
             return self.success_response(
                 message="Chat session deleted successfully",
                 status_code=status.HTTP_200_OK
             )
+            
+        except ChatSession.DoesNotExist:
+            return self.not_found_response(message="Session not found")
         except Exception as e:
             return self.handle_exception(e)
 
