@@ -12,5 +12,7 @@ urlpatterns = [
         "populate-onboarding-data/",
         views.populate_onboarding_data,
         name="populate_onboarding_data",
-    ),  # Add this line
+    ),
+    path('weekly-checkin/populate/', views.populate_weekly_checkin_questions, name='populate_weekly_checkin'),
+    path('weekly-checkin/questions/', views.get_weekly_checkin_questions, name='get_weekly_checkin_questions'),
 ]

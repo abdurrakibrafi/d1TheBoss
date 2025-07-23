@@ -364,3 +364,134 @@ class FakeDataAPIView(BaseResponseMixin, APIView):
                 message=f"Error processing request: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+
+# serializers.py weekly check-in questions and options
+from rest_framework import serializers
+from apps.checkin.models import WeeklyCheckinQuestion, WeeklyCheckinOption
+
+class WeeklyCheckinOptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WeeklyCheckinOption
+        fields = ['id', 'option_text', 'option_order']
+
+class WeeklyCheckinQuestionSerializer(serializers.ModelSerializer):
+    options = WeeklyCheckinOptionSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = WeeklyCheckinQuestion
+        fields = ['id', 'question_text', 'question_order', 'is_active', 'created_at', 'options']
+
+
+# Views for Weekly Check-in population and retrieval
+
+@api_view(['POST'])
+def populate_weekly_checkin_questions(request):
+    """
+    API endpoint to populate all weekly check-in questions and their options
+    Call this API via POST request to automatically create all questions
+    """
+    try:
+        # Clear existing data (optional - remove if you don't want to clear)
+        WeeklyCheckinQuestion.objects.all().delete()
+        
+        questions_data = [
+            {
+                'question': 'This week, how confident did you feel sharing your faith with others?',
+                'options': ['Not at all', 'Hesitant', 'Growing in boldness', 'Mostly confident', 'Completely confident']
+            },
+            {
+                'question': 'When conversations about faith came up, how prepared did you feel to respond?',
+                'options': ['Not prepared at all', 'Caught off guard', 'Finding my footing', 'Mostly prepared', 'Fully prepared']
+            },
+            {
+                'question': 'How clearly did scripture speak to you this week?',
+                'options': ['Not clear at all', 'A bit cloudy', 'Starting to make sense', 'Mostly clear', 'Crystal clear']
+            },
+            {
+                'question': 'When reflecting on your relationship with God, how much peace did you feel?',
+                'options': ['Restless', 'Wrestling with it', 'Finding moments of peace', 'Mostly at peace', 'Completely at peace']
+            },
+            {
+                'question': 'How often did you create space to pray, reflect, or listen for God\'s voice?',
+                'options': ['Not at all', 'Rarely, but I want to more', 'Somewhat consistent', 'Often', 'Every day']
+            },
+            {
+                'question': 'How present did God feel in your daily life this week?',
+                'options': ['Distant', 'There in moments', 'Becoming more aware', 'Mostly present', 'Very near']
+            },
+            {
+                'question': 'How confident do you feel about the direction of your faith journey?',
+                'options': ['Uncertain', 'Taking small steps', 'Finding my rhythm', 'Mostly confident', 'Very confident']
+            },
+            {
+                'question': 'Looking back on this week, how much growth do you see in your faith?',
+                'options': ['None at all', 'A little, but I want more', 'Some noticeable growth', 'A lot of growth', 'Tremendous growth']
+            },
+            {
+                'question': 'How often did you feel uplifted and encouraged in your walk with God this week?',
+                'options': ['Not at all', 'Needed more encouragement', 'Had some encouraging moments', 'Often', 'Constantly']
+            },
+            {
+                'question': 'How motivated are you to continue deepening your faith in the coming week?',
+                'options': ['Not at all', 'A little spark of motivation', 'Starting to feel inspired', 'Mostly motivated', 'Fully motivated']
+            }
+        ]
+
+        created_questions = []
+        
+        for index, question_data in enumerate(questions_data, 1):
+            # Create question
+            question = WeeklyCheckinQuestion.objects.create(
+                question_text=question_data['question'],
+                question_order=index,
+                is_active=True
+            )
+            
+            # Create options for this question
+            for option_index, option_text in enumerate(question_data['options'], 1):
+                WeeklyCheckinOption.objects.create(
+                    question=question,
+                    option_text=option_text,
+                    option_order=option_index
+                )
+            
+            created_questions.append(question)
+        
+        # Serialize the created questions with their options
+        serializer = WeeklyCheckinQuestionSerializer(created_questions, many=True)
+        
+        return Response({
+            'success': True,
+            'message': f'Successfully created {len(created_questions)} questions with their options',
+            'data': serializer.data
+        }, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Error creating questions: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+def get_weekly_checkin_questions(request):
+    """
+    API endpoint to retrieve all weekly check-in questions with their options
+    """
+    try:
+        questions = WeeklyCheckinQuestion.objects.filter(is_active=True).prefetch_related('options')
+        serializer = WeeklyCheckinQuestionSerializer(questions, many=True)
+        
+        return Response({
+            'success': True,
+            'count': len(questions),
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Error retrieving questions: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
