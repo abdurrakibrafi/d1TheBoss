@@ -109,11 +109,12 @@ class ConversationManager:
         # Bible Familiarity
         bible_familiarity = self._get_user_bible_familiarity()
         if bible_familiarity:
+            option = bible_familiarity.bible_familiarity_option
             context['bible_familiarity'] = {
-                'label': bible_familiarity.bible_familiarity_option.label,
-                'title': bible_familiarity.bible_familiarity_option.title,
-                'text1': bible_familiarity.bible_familiarity_option.text1,
-                'text2': bible_familiarity.bible_familiarity_option.text2,
+                'label': option.label if option else None,
+                'title': option.title if option else None,
+                'text1': option.text1 if option else None,
+                'text2': option.text2 if option else None,
                 'custom_text': bible_familiarity.text,
             }
             context['bible_familiarity_id'] = bible_familiarity.id
