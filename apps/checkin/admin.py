@@ -2,7 +2,6 @@ from django.contrib import admin
 from apps.checkin.models import (
     UserStreak,
     DailyCheckin,
-    UserGoal,
     WeeklyCheckinQuestion,
     WeeklyCheckinOption,
     UserWeeklyCheckin,
@@ -21,13 +20,6 @@ class UserStreakAdmin(admin.ModelAdmin):
 @admin.register(DailyCheckin)
 class DailyCheckinAdmin(admin.ModelAdmin):
     list_display = ('user', 'checkin_date', 'streak_day', 'created_at')
-    search_fields = ('user__email',)
-    readonly_fields = ('created_at',)
-
-
-@admin.register(UserGoal)
-class UserGoalAdmin(admin.ModelAdmin):
-    list_display = ('user', 'goal_type', 'target_count', 'current_count', 'completed', 'created_at')
     search_fields = ('user__email',)
     readonly_fields = ('created_at',)
 
