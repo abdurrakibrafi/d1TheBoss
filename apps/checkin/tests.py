@@ -15,6 +15,7 @@ class CreateTestDataAPIView(APIView):
     def post(self, request):
         """Create test data for check-in system using existing questions"""
         days = request.data.get('days', 14)
+        reset_completed = request.data.get('reset_completed', False)  # NEW PARAMETER
         user = request.user
         
         try:
@@ -25,8 +26,8 @@ class CreateTestDataAPIView(APIView):
                     'error': 'No questions found in database. Please create questions first.'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Create streak data
-            result = self._create_streak_data(user, days)
+            # Create streak data with new parameter
+            result = self._create_streak_data(user, days, reset_completed)  # PASS THE PARAMETER
             
             return Response({
                 'message': f'Successfully created test data with {days} days streak',
@@ -34,19 +35,31 @@ class CreateTestDataAPIView(APIView):
                 'days_created': days,
                 'weeks_completed': days // 7,
                 'badges_earned': result['badges_count'],
-                'questions_available': questions_count
+                'questions_available': questions_count,
+                'reset_completed': reset_completed  # Show what was done
             }, status=status.HTTP_201_CREATED)
             
         except Exception as e:
             return Response({
                 'error': f'Failed to create test data: {str(e)}'
             }, status=status.HTTP_400_BAD_REQUEST)
-    
-    def _create_streak_data(self, user, days):
+
+    def _create_streak_data(self, user, days, reset_completed=False):  # ADD PARAMETER HERE
         """Create streak data for testing"""
         # Clear existing data first
         DailyCheckin.objects.filter(user=user).delete()
-        UserWeeklyCheckin.objects.filter(user=user).delete()
+        
+        # REPLACE THIS LINE:
+        # UserWeeklyCheckin.objects.filter(user=user).delete()  # ❌ REMOVE THIS
+        
+        # WITH THIS LOGIC:
+        if reset_completed:
+            # Full reset - delete everything
+            UserWeeklyCheckin.objects.filter(user=user).delete()
+        else:
+            # Preserve completed weekly check-ins, only delete incomplete ones
+            UserWeeklyCheckin.objects.filter(user=user, is_completed=False).delete()
+        
         UserBadge.objects.filter(user=user).delete()
         
         # Create or get user streak
@@ -76,26 +89,29 @@ class CreateTestDataAPIView(APIView):
                 questions = WeeklyCheckinQuestion.objects.filter(is_active=True).order_by('question_order')
                 
                 for week in range(1, weeks_completed + 1):
-                    # Create weekly check-in
-                    weekly_checkin = UserWeeklyCheckin.objects.create(
+                    # Only create if doesn't exist (preserves existing completed ones)
+                    weekly_checkin, created = UserWeeklyCheckin.objects.get_or_create(
                         user=user,
                         week_number=week,
-                        is_available=True,
-                        is_completed=True,
-                        completed_at=timezone.now() - timedelta(days=(weeks_completed-week)*7)
+                        defaults={
+                            'is_available': True,
+                            'is_completed': True,
+                            'completed_at': timezone.now() - timedelta(days=(weeks_completed-week)*7)
+                        }
                     )
                     
-                    # Create sample responses using your real questions
-                    for question in questions:
-                        options = question.options.all()
-                        if options:
-                            # Vary responses based on week for realistic data
-                            option_index = (week + question.id) % len(options)
-                            UserWeeklyCheckinResponse.objects.create(
-                                weekly_checkin=weekly_checkin,
-                                question=question,
-                                selected_option=options[option_index]
-                            )
+                    # Only create responses if it's a new weekly checkin
+                    if created:
+                        for question in questions:
+                            options = question.options.all()
+                            if options:
+                                # Vary responses based on week for realistic data
+                                option_index = (week + question.id) % len(options)
+                                UserWeeklyCheckinResponse.objects.create(
+                                    weekly_checkin=weekly_checkin,
+                                    question=question,
+                                    selected_option=options[option_index]
+                                )
                     
                     # Award badges for milestones
                     milestones = self._get_badge_milestones()
@@ -116,7 +132,20 @@ class CreateTestDataAPIView(APIView):
                     week_number=weeks_completed + 1,
                     defaults={'is_available': True, 'is_completed': False}
                 )
-        
+
+                if days % 7 == 0:
+                    # Find next available week number
+                    existing_weeks = UserWeeklyCheckin.objects.filter(user=user).values_list('week_number', flat=True)
+                    next_week_num = max(existing_weeks) + 1 if existing_weeks else 1
+                    
+                    # Create next week as available (not completed)
+                    UserWeeklyCheckin.objects.get_or_create(
+                        user=user,
+                        week_number=next_week_num,
+                        defaults={'is_available': True, 'is_completed': False}
+                    )
+                    print(f"Created Week {next_week_num} as available for testing")
+    
         return {'badges_count': badges_count}
 
     def _get_badge_milestones(self):
@@ -244,8 +273,8 @@ class QuickTestScenariosAPIView(APIView):
             if days > 0:
                 # Use the same method as CreateTestDataAPIView
                 create_api = CreateTestDataAPIView()
-                result = create_api._create_streak_data(user, days)
-            
+                result = create_api._create_streak_data(user, days, reset_completed=True)  # Full reset for scenarios 
+                           
             return Response({
                 'message': f'Successfully created {scenario} scenario',
                 'scenario': scenarios[scenario],
