@@ -33,6 +33,11 @@ class WeeklyCheckinResponseSerializer(serializers.ModelSerializer):
         model = UserWeeklyCheckinResponse
         fields = ['question', 'selected_option']
 
+class UserGoalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserGoal
+        fields = ['goal_type', 'target_count', 'current_count', 'completed', 'created_at']
+
 # class NotificationSettingSerializer(serializers.ModelSerializer):
 #     class Meta:
 #         model = NotificationSetting

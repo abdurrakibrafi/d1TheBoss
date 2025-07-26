@@ -47,13 +47,22 @@ class ChatSessionDetailSerializer(serializers.ModelSerializer):
         if obj.journey_reason:
             context['journey_reason'] = obj.journey_reason.journey_reason.option
         if obj.denomination:
-            context['denomination'] = obj.denomination.denomination_option.name if obj.denomination.denomination_option else obj.denomination.name
+            context['denomination'] = (
+                obj.denomination.denomination_option.name
+                if obj.denomination.denomination_option else obj.denomination.name
+            )
         if obj.faith_goal:
-            context['faith_goal'] = obj.faith_goal.faith_goal_option.option if obj.faith_goal.faith_goal_option else obj.faith_goal.text
+            context['faith_goal'] = (
+                obj.faith_goal.faith_goal_option.option
+                if obj.faith_goal.faith_goal_option else obj.faith_goal.text
+            )
         if obj.tone_preference:
-            context['tone_preference'] = obj.tone_preference.tone_preference_option.name
+            option = obj.tone_preference.tone_preference_option
+            context['tone_preference'] = option.name if option else None
         if obj.bible_familiarity:
-            context['bible_familiarity'] = obj.bible_familiarity.bible_familiarity_option.label
+            option = obj.bible_familiarity.bible_familiarity_option
+            context['bible_familiarity'] = option.label if option else None
         if obj.bible_version:
-            context['bible_version'] = obj.bible_version.bible_version_option.title
+            option = obj.bible_version.bible_version_option
+            context['bible_version'] = option.title if option else None
         return context

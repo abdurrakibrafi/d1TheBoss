@@ -27,7 +27,7 @@ class DailyCheckinAdmin(admin.ModelAdmin):
 
 @admin.register(UserGoal)
 class UserGoalAdmin(admin.ModelAdmin):
-    list_display = ('user', 'goal_type', 'target_count', 'current_count', 'date', 'completed', 'created_at')
+    list_display = ('user', 'goal_type', 'target_count', 'current_count', 'completed', 'created_at')
     search_fields = ('user__email',)
     readonly_fields = ('created_at',)
 
