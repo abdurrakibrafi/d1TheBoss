@@ -27,27 +27,6 @@ class DailyCheckin(models.Model):
         unique_together = ('user', 'checkin_date')
         ordering = ['-checkin_date']
 
-class UserGoal(models.Model):
-    GOAL_TYPES = [
-        ('scripture', 'Scripture'),
-        ('share_faith', 'Share Faith'),
-        ('conversation', 'Conversation'),
-    ]
-    
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='goals')
-    goal_type = models.CharField(max_length=20, choices=GOAL_TYPES)
-    target_count = models.IntegerField(blank=True, null=True)
-    current_count = models.IntegerField(default=0)
-
-    completed = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.user.email} - {self.get_goal_type_display()}"
-    
-    class Meta:
-        unique_together = ('user', 'goal_type')
-
 
 class WeeklyCheckinQuestion(models.Model):
     question_text = models.TextField(blank=True, null=True)
@@ -109,3 +88,25 @@ class UserBadge(models.Model):
             milestones.append(current)
             current += 4
         return milestones
+    
+
+class UserGoal(models.Model):
+    GOAL_TYPES = [
+        ('scripture', 'Scripture'),
+        ('share_faith', 'Share Faith'),
+        ('conversation', 'Conversation'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='goals')
+    goal_type = models.CharField(max_length=20, choices=GOAL_TYPES)
+    target_count = models.IntegerField(blank=True, null=True)
+    current_count = models.IntegerField(default=0)
+
+    completed = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.email} - {self.get_goal_type_display()}"
+    
+    class Meta:
+        unique_together = ('user', 'goal_type')
