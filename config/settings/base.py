@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "apps.subscription",
     "apps.checkin",
     "apps.homepage",
+    "apps.goal",
     
 
 ]

@@ -12,7 +12,6 @@ from apps.checkin.models import (
     WeeklyCheckinOption,
     UserWeeklyCheckin,
     UserWeeklyCheckinResponse,
-    UserGoal
     )
 from apps.checkin.serializers import (
     DailyCheckinSerializer,
@@ -21,7 +20,6 @@ from apps.checkin.serializers import (
     WeeklyCheckinQuestionSerializer,
     WeeklyCheckinOptionSerializer,
     WeeklyCheckinResponseSerializer,
-    UserGoalSerializer
     )
 from apps.core.utils.mixins import BaseResponseMixin
 
