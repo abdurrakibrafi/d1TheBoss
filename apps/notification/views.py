@@ -13,28 +13,38 @@ from apps.core.utils.mixins import BaseResponseMixin
 
 logger = logging.getLogger(__name__)
 
+from rest_framework.response import Response
+
 class NotificationViewSet(BaseResponseMixin, viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         return Notification.objects.filter(user=self.request.user).order_by('-created_at')
-    
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return self.success_response(serializer.data)
+
     @action(detail=False, methods=['get'])
     def unread_count(self, request):
-        """GET /api/notifications/unread_count/"""
         count = self.get_queryset().filter(is_read=False).count()
         return self.success_response({'unread_count': count})
-    
+
     @action(detail=False, methods=['post'])
     def mark_all_read(self, request):
-        """POST /api/notifications/mark_all_read/"""
         updated = self.get_queryset().filter(is_read=False).update(is_read=True)
         return self.success_response({'updated_count': updated})
-    
+
     @action(detail=True, methods=['post'])
     def mark_read(self, request, pk=None):
-        """POST /api/notifications/{id}/mark_read/"""
         notification = self.get_object()
         notification.is_read = True
         notification.save()
@@ -42,10 +52,11 @@ class NotificationViewSet(BaseResponseMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['delete'])
     def clear_all(self, request):
-        """DELETE /api/notifications/clear_all/"""
         deleted_count = self.get_queryset().count()
         self.get_queryset().delete()
         return self.success_response({'deleted_count': deleted_count})
+
+
 
 class FCMTokenViewSet(BaseResponseMixin, viewsets.ModelViewSet):
     serializer_class = FCMTokenSerializer
