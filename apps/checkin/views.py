@@ -204,212 +204,250 @@ class WeeklyCheckinQuestionsAPIView(BaseResponseMixin, APIView):
     
 
 class WeeklyCheckinSubmitAPIView(BaseResponseMixin, APIView):
+   permission_classes = [IsAuthenticated]
+   
+   def post(self, request):
+       """Submit weekly checkin responses"""
+       user = request.user
+       weekly_checkin_id = request.data.get('weekly_checkin_id')
+       responses = request.data.get('responses', [])  # [{'question': 1, 'selected_option': 2}, ...]
+       
+       try:
+           weekly_checkin = UserWeeklyCheckin.objects.get(
+               id=weekly_checkin_id,
+               user=user,
+               is_available=True,
+               is_completed=False
+           )
+       except UserWeeklyCheckin.DoesNotExist:
+           return self.error_response({
+               'error': 'Weekly check-in not available'
+           }, status=status.HTTP_400_BAD_REQUEST)
+       
+       # Check if responses already exist
+       existing_responses = UserWeeklyCheckinResponse.objects.filter(weekly_checkin=weekly_checkin)
+       if existing_responses.exists():
+           # Just mark as completed if responses exist but not marked complete
+           weekly_checkin.is_completed = True
+           weekly_checkin.completed_at = timezone.now()
+           weekly_checkin.save()
+           
+           return self.success_response({
+               'message': 'Weekly check-in already completed',
+               'week_number': weekly_checkin.week_number
+           }, status=status.HTTP_200_OK)
+       
+       # Validate all 10 questions answered
+       if len(responses) != 10:
+           return self.error_response({
+               'error': 'All 10 questions must be answered'
+           }, status=status.HTTP_400_BAD_REQUEST)
+       
+       # Save responses
+       try:
+           for response_data in responses:
+               UserWeeklyCheckinResponse.objects.create(
+                   weekly_checkin=weekly_checkin,
+                   question_id=response_data['question'],
+                   selected_option_id=response_data['selected_option']
+               )
+           
+           # Mark as completed
+           weekly_checkin.is_completed = True
+           weekly_checkin.completed_at = timezone.now()
+           weekly_checkin.save()
+           
+           return self.success_response({
+               'message': 'Weekly check-in completed successfully',
+               'week_number': weekly_checkin.week_number
+           }, status=status.HTTP_201_CREATED)
+           
+       except Exception as e:
+           return self.error_response({
+               'error': f'Failed to save responses: {str(e)}'
+           }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+       
+       
+
+class WeeklyCheckinHistoryAPIView(APIView):
     permission_classes = [IsAuthenticated]
-    
-    def post(self, request):
-        """Submit weekly checkin responses"""
-        user = request.user
-        weekly_checkin_id = request.data.get('weekly_checkin_id')
-        responses = request.data.get('responses', [])  # [{'question': 1, 'selected_option': 2}, ...]
-        
-        try:
-            weekly_checkin = UserWeeklyCheckin.objects.get(
-                id=weekly_checkin_id,
-                user=user,
-                is_available=True,
-                is_completed=False
-            )
-        except UserWeeklyCheckin.DoesNotExist:
-            return self.error_response({
-                'error': 'Weekly check-in not available'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Validate all 10 questions answered
-        if len(responses) != 10:
-            return self.error_response({
-                'error': 'All 10 questions must be answered'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Save responses
-        for response_data in responses:
-            UserWeeklyCheckinResponse.objects.create(
-                weekly_checkin=weekly_checkin,
-                question_id=response_data['question'],
-                selected_option_id=response_data['selected_option']
-            )
-        
-        # Mark as completed
-        weekly_checkin.is_completed = True
-        weekly_checkin.completed_at = timezone.now()
-        weekly_checkin.save()
-        
-        return self.success_response({
-            'message': 'Weekly check-in completed successfully',
-            'week_number': weekly_checkin.week_number
-        }, status=status.HTTP_201_CREATED)
-    
-class WeeklyCheckinHistoryAPIView(BaseResponseMixin, APIView):
-    permission_classes = [IsAuthenticated]
-        
+
     def get(self, request, week_number=None):
-        """Get weekly check-in history - ALWAYS visible regardless of current streak"""
         user = request.user
         
-        if week_number is not None:
-            # Handle single week request - ensure week_number is an integer
+        if week_number:
+            # Get specific weekly check-in details with questions and answers
             try:
-                week_number = int(week_number)
-            except (ValueError, TypeError):
-                return self.error_response("Invalid week number", status_code=400)
-            
-            current_streak = user.streak.current_streak if hasattr(user, 'streak') else 0
-            
-            try:
-                checkin = UserWeeklyCheckin.objects.get(user=user, week_number=week_number)
-                days_required = week_number * 7
-                days_progress = min(current_streak, days_required)
+                weekly_checkin = UserWeeklyCheckin.objects.get(
+                    user=user, 
+                    week_number=week_number
+                )
                 
-                checkin_data = {
-                    'weekly_checkin_id': checkin.id,
-                    'week_number': checkin.week_number,
-                    'completed_at': checkin.completed_at,
-                    'total_responses': checkin.responses.count() if checkin.is_completed else 0,
-                    'is_available': checkin.is_available and not checkin.is_completed,
-                    'is_completed': checkin.is_completed,
-                    'days_required': days_required,
-                    'days_progress': days_progress,
-                    'status': self._get_status_for_existing_checkin(checkin, current_streak, days_required)
+                # Get all responses for this weekly check-in
+                responses = UserWeeklyCheckinResponse.objects.filter(
+                    weekly_checkin=weekly_checkin
+                ).select_related('question', 'selected_option').order_by('question__question_order')
+                
+                # Build detailed response with questions and answers
+                questions_and_answers = []
+                for response in responses:
+                    # Get all options for this question to show what was available
+                    all_options = WeeklyCheckinOption.objects.filter(
+                        question=response.question
+                    ).order_by('option_order')
+                    
+                    options_data = []
+                    for option in all_options:
+                        options_data.append({
+                            "option_id": option.id,
+                            "option_text": option.option_text,
+                            "option_order": option.option_order,
+                            "is_selected": option.id == response.selected_option.id
+                        })
+                    
+                    questions_and_answers.append({
+                        "question_id": response.question.id,
+                        "question_text": response.question.question_text,
+                        "question_order": response.question.question_order,
+                        "selected_answer": {
+                            "option_id": response.selected_option.id,
+                            "option_text": response.selected_option.option_text,
+                            "option_order": response.selected_option.option_order
+                        },
+                        "all_options": options_data,
+                        "answered_at": response.created_at
+                    })
+                
+                data = {
+                    "weekly_checkin": {
+                        "weekly_checkin_id": weekly_checkin.id,
+                        "week_number": weekly_checkin.week_number,
+                        "completed_at": weekly_checkin.completed_at,
+                        "is_completed": weekly_checkin.is_completed,
+                        "is_available": weekly_checkin.is_available,
+                        "days_required": weekly_checkin.week_number * 7,
+                        "days_progress": user.streak.current_streak,
+                        "status": "completed" if weekly_checkin.is_completed else "available" if weekly_checkin.is_available else "locked",
+                        "total_responses": responses.count()
+                    },
+                    "questions_and_answers": questions_and_answers,
+                    "summary": {
+                        "total_questions": len(questions_and_answers),
+                        "completion_rate": f"{len(questions_and_answers)}/10" if len(questions_and_answers) <= 10 else f"{len(questions_and_answers)}/{len(questions_and_answers)}"
+                    },
+                    "current_streak": user.streak.current_streak
                 }
                 
-                return self.success_response({
-                    'weekly_checkin': checkin_data,
-                    'current_streak': current_streak
+                return Response({
+                    "success": True,
+                    "message": "Weekly check-in details retrieved successfully",
+                    "timestamp": timezone.now(),
+                    "status_code": 200,
+                    "data": data
                 })
                 
             except UserWeeklyCheckin.DoesNotExist:
-                # Return placeholder data for non-existing week
-                days_required = week_number * 7
-                days_progress = min(current_streak, days_required)
+                return Response({
+                    "success": False,
+                    "message": f"Weekly check-in for week {week_number} not found",
+                    "timestamp": timezone.now(),
+                    "status_code": 404,
+                    "data": {}
+                })
+        
+        else:
+            # List all weekly check-ins (your existing logic)
+            try:
+                # Calculate how many weeks user should have based on their streak
+                current_streak = user.streak.current_streak
+                max_possible_weeks = (current_streak // 7) + 3  # Add buffer for future weeks
                 
-                checkin_data = {
-                    'weekly_checkin_id': None,
-                    'week_number': week_number,
-                    'completed_at': None,
-                    'total_responses': 0,
-                    'is_available': False,
-                    'is_completed': False,
-                    'days_required': days_required,
-                    'days_progress': days_progress,
-                    'status': self._get_status_for_placeholder(current_streak, days_required)
+                weekly_checkins = []
+                total_completed = 0
+                total_available = 0
+                
+                for week_num in range(max_possible_weeks, 0, -1):  # Reverse order (newest first)
+                    days_required = week_num * 7
+                    
+                    try:
+                        weekly_checkin = UserWeeklyCheckin.objects.get(
+                            user=user,
+                            week_number=week_num
+                        )
+                        
+                        # Count responses for this weekly checkin
+                        response_count = UserWeeklyCheckinResponse.objects.filter(
+                            weekly_checkin=weekly_checkin
+                        ).count()
+                        
+                        status = "completed" if weekly_checkin.is_completed else "available" if weekly_checkin.is_available else "locked"
+                        
+                        if weekly_checkin.is_completed:
+                            total_completed += 1
+                        elif weekly_checkin.is_available:
+                            total_available += 1
+                        
+                        weekly_checkins.append({
+                            "weekly_checkin_id": weekly_checkin.id,
+                            "week_number": week_num,
+                            "completed_at": weekly_checkin.completed_at,
+                            "total_responses": response_count,
+                            "is_available": weekly_checkin.is_available,
+                            "is_completed": weekly_checkin.is_completed,
+                            "days_required": days_required,
+                            "days_progress": current_streak,
+                            "status": status
+                        })
+                        
+                    except UserWeeklyCheckin.DoesNotExist:
+                        # Weekly checkin doesn't exist yet
+                        is_available = current_streak >= days_required
+                        status = "available" if is_available else "locked"
+                        
+                        if is_available:
+                            total_available += 1
+                        
+                        weekly_checkins.append({
+                            "weekly_checkin_id": None,
+                            "week_number": week_num,
+                            "completed_at": None,
+                            "total_responses": 0,
+                            "is_available": is_available,
+                            "is_completed": False,
+                            "days_required": days_required,
+                            "days_progress": current_streak,
+                            "status": status
+                        })
+                
+                # Generate appropriate message
+                if total_available > 0:
+                    message = f"You have {total_available} weekly check-in{'s' if total_available != 1 else ''} available to complete!"
+                elif total_completed > 0:
+                    message = f"Great job! You've completed {total_completed} weekly check-in{'s' if total_completed != 1 else ''}."
+                else:
+                    message = "Keep building your daily streak to unlock weekly check-ins!"
+                
+                data = {
+                    "completed_weekly_checkins": weekly_checkins,
+                    "total_completed_weekly_checkins": total_completed,
+                    "total_available_weekly_checkins": total_available,
+                    "current_streak": current_streak,
+                    "message": message
                 }
                 
-                return self.success_response({
-                    'weekly_checkin': checkin_data,
-                    'current_streak': current_streak
+                return Response({
+                    "success": True,
+                    "message": "Success",
+                    "timestamp": timezone.now(),
+                    "status_code": 200,
+                    "data": data
                 })
-            
-            except Exception as e:
-                # Catch any other unexpected errors
-                return self.error_response(f"Error retrieving weekly check-in: {str(e)}", status_code=500)
-        else:
-            # Get current streak
-            current_streak = user.streak.current_streak if hasattr(user, 'streak') else 0
-            
-            # Get all existing weekly check-ins
-            existing_checkins = UserWeeklyCheckin.objects.filter(user=user).order_by('-week_number')
-            existing_checkins_dict = {checkin.week_number: checkin for checkin in existing_checkins}
-            
-            # Find the maximum week that should be shown
-            max_existing_week = existing_checkins.first().week_number if existing_checkins.exists() else 0
-            
-            # Always show at least 4 weeks, but include all existing weeks
-            max_weeks_to_show = max(4, max_existing_week)
-            
-            # If user has current streak that unlocks a new week, show that too
-            potential_next_week = max_existing_week + 1
-            if current_streak > 0 and current_streak % 7 == 0 and potential_next_week not in existing_checkins_dict:
-                max_weeks_to_show = max(max_weeks_to_show, potential_next_week)
-            
-            checkins_data = []
-            
-            # Create weekly check-in structure
-            for week_num in range(1, max_weeks_to_show + 1):
-                days_required = week_num * 7
-                days_progress = min(current_streak, days_required)
                 
-                if week_num in existing_checkins_dict:
-                    # Use existing checkin data
-                    checkin = existing_checkins_dict[week_num]
-                    checkins_data.append({
-                        'weekly_checkin_id': checkin.id,
-                        'week_number': checkin.week_number,
-                        'completed_at': checkin.completed_at,
-                        'total_responses': checkin.responses.count() if checkin.is_completed else 0,
-                        'is_available': checkin.is_available and not checkin.is_completed,
-                        'is_completed': checkin.is_completed,
-                        'days_required': days_required,
-                        'days_progress': days_progress,
-                        'status': self._get_status_for_existing_checkin(checkin, current_streak, days_required)
-                    })
-                else:
-                    # Create placeholder for non-existing weeks
-                    if week_num <= 4 and max_weeks_to_show <= 4:
-                        checkins_data.append({
-                            'weekly_checkin_id': None,
-                            'week_number': week_num,
-                            'completed_at': None,
-                            'total_responses': 0,
-                            'is_available': False,
-                            'is_completed': False,
-                            'days_required': days_required,
-                            'days_progress': days_progress,
-                            'status': self._get_status_for_placeholder(current_streak, days_required)
-                        })
-            
-            # Sort by week number descending
-            checkins_data.sort(key=lambda x: x['week_number'], reverse=True)
-            
-            # Calculate stats
-            completed_count = len([c for c in checkins_data if c['is_completed']])
-            available_count = len([c for c in checkins_data if c['is_available']])
-            
-            return self.success_response({
-                'completed_weekly_checkins': checkins_data,
-                'total_completed_weekly_checkins': completed_count,
-                'total_available_weekly_checkins': available_count,
-                'current_streak': current_streak,
-                'message': self._get_status_message(current_streak, available_count)
-            })
-
-    def _get_status_for_existing_checkin(self, checkin, current_streak, days_required):
-        """Get status for existing weekly check-ins - FIXED VERSION"""
-        if checkin.is_completed:
-            return 'completed'
-        elif checkin.is_available:
-            return 'available'  # If it's available, it's available!
-        else:
-            return 'missed'  # Not available and not completed = missed
-
-    def _get_status_for_placeholder(self, current_streak, days_required):
-        """Get status for non-existing weekly check-ins"""
-        if current_streak >= days_required:
-            return 'missed' 
-        elif current_streak >= (days_required - 7):
-            return 'in_progress'
-        else:
-            return 'locked'
-
-    def _get_status_message(self, current_streak, available_count):
-        """Generate contextual message based on current state"""
-        if current_streak == 0:
-            return 'Start your daily check-in streak to unlock weekly check-ins!'
-        elif current_streak < 7:
-            days_needed = 7 - current_streak
-            return f'Continue your streak! {days_needed} more day{"s" if days_needed > 1 else ""} to unlock your first weekly check-in.'
-        elif available_count > 0:
-            return f'You have {available_count} weekly check-in{"s" if available_count > 1 else ""} available to complete!'
-        elif current_streak % 7 == 0:
-            return 'Congratulations! You can complete your weekly check-in now!'
-        else:
-            days_to_next = 7 - (current_streak % 7)
-            return f'Great progress! {days_to_next} more day{"s" if days_to_next > 1 else ""} to unlock your next weekly check-in.'
+            except Exception as e:
+                return Response({
+                    "success": False,
+                    "message": f"Error retrieving weekly check-ins: {str(e)}",
+                    "timestamp": timezone.now(),
+                    "status_code": 500,
+                    "data": {}
+                })

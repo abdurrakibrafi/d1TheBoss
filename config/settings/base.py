@@ -46,6 +46,8 @@ INSTALLED_APPS = [
     "channels",
     "django_celery_beat",
     "drf_spectacular",
+    "firebase_admin",
+    "celery",
     # Local apps
     "apps.accounts",
     "apps.core",

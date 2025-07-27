@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   web:
     build: .
@@ -14,6 +16,52 @@ services:
       - db
       - redis
     restart: unless-stopped
+    command: python manage.py runserver 0.0.0.0:8000
+
+  # Celery Worker
+  celery:
+    build: .
+    container_name: bibel_celery
+    volumes:
+      - .:/app
+      - media_volume:/app/media
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    command: celery -A config worker --loglevel=info
+
+  # Celery Beat (for scheduled tasks)
+  celery-beat:
+    build: .
+    container_name: bibel_celery_beat
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    command: celery -A config beat --loglevel=info
+
+  # Celery Flower (monitoring UI)
+  flower:
+    build: .
+    container_name: bibel_flower
+    ports:
+      - "5555:5555"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    restart: unless-stopped
+    entrypoint: []  
+    command: celery -A config flower --port=5555 --address=0.0.0.0
 
   db:
     image: postgres:15
@@ -39,8 +87,8 @@ services:
     image: rnwood/smtp4dev:linux-amd64-v3
     container_name: bibel_smtp4dev
     ports:
-      - "3000:80"   # Web UI (access at http://localhost:3000)
-      - "2525:25"   # SMTP port (for Django to send emails)
+      - "3000:80"
+      - "2525:25"
     volumes:
       - smtp4dev_data:/smtp4dev
     restart: unless-stopped

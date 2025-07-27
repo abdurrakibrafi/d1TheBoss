@@ -1,78 +1,7 @@
-# settings.py - Add these configs
-
-import os
-from celery import Celery
-
-# Celery Configuration (PRODUCTION READY)
-CELERY_BROKER_URL = env('REDIS_URL', default='redis://redis:6379/0')
-CELERY_RESULT_BACKEND = env('REDIS_URL', default='redis://redis:6379/0')
-
-# Celery Task Settings
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'UTC'
-CELERY_ENABLE_UTC = True
-
-# Task routing
-CELERY_TASK_ROUTES = {
-    'notifications.tasks.send_push_notification': {'queue': 'notifications'},
-    'notifications.tasks.send_email_notification': {'queue': 'notifications'},
-    'notifications.tasks.send_websocket_notification': {'queue': 'realtime'},
-}
-
-# Worker settings
-CELERY_WORKER_PREFETCH_MULTIPLIER = 1
-CELERY_TASK_ACKS_LATE = True
-CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000
-
-# Retry settings
-CELERY_TASK_DEFAULT_RETRY_DELAY = 60
-CELERY_TASK_MAX_RETRIES = 3
-
-# Redis for Channels (WebSocket)
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [env("REDIS_URL", default="redis://redis:6379/1")],  # Different DB
-        },
-    },
-}
-
-# Firebase Admin SDK
-FIREBASE_CREDENTIALS_PATH = env('FIREBASE_CREDENTIALS_PATH', default='firebase-credentials.json')
-
-# celery.py (create this file in your project root)
-import os
-from celery import Celery
-from django.conf import settings
-
-# Set Django settings module
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'your_project_name.settings')
-
-app = Celery('your_project_name')
-
-# Configure Celery using settings from Django settings.py
-app.config_from_object('django.conf:settings', namespace='CELERY')
-
-# Auto-discover tasks
-app.autodiscover_tasks()
-
-@app.task(bind=True)
-def debug_task(self):
-    print(f'Request: {self.request!r}')
-
-# __init__.py (in your project root, next to settings.py)
-from .celery import app as celery_app
-
-__all__ = ('celery_app',)
-
-# tasks.py (complete with error handling)
 from celery import shared_task
 from firebase_admin import messaging
 from django.utils import timezone
-from django.contrib.auth.models import User
+from apps.accounts.models import User
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 import logging
@@ -82,8 +11,10 @@ from firebase_admin import credentials
 logger = logging.getLogger(__name__)
 
 # Initialize Firebase (do this once)
+from django.conf import settings
+
 if not firebase_admin._apps:
-    cred = credentials.Certificate('firebase-credentials.json')
+    cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
     firebase_admin.initialize_app(cred)
 
 @shared_task(bind=True, max_retries=3)
@@ -192,11 +123,3 @@ def _handle_failed_tokens(response, tokens, user):
             user=user,
             token__in=failed_tokens
         ).update(is_active=False)
-
-# requirements.txt additions
-"""
-celery[redis]==5.3.4
-flower==2.0.1
-firebase-admin==6.4.0
-channels-redis==4.1.0
-"""
