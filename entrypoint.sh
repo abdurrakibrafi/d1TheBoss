@@ -4,25 +4,37 @@ set -o nounset
 
 echo "🔥 FORCING DEPLOYMENT TO WORK..."
 
-echo "⏰ Waiting for database to be ready..."
-sleep 15  # Give database time to start up
+wait_for_db() {
+    echo "⏰ Waiting for database..."
+    max_attempts=30
+    attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        if python manage.py check --database default > /dev/null 2>&1; then
+            echo "✅ Database ready!"
+            break
+        else
+            sleep 2
+            attempt=$((attempt + 1))
+        fi
+        
+        if [ $attempt -gt $max_attempts ]; then
+            echo "❌ Database timeout"
+            exit 1
+        fi
+    done
+}
 
-echo "🎭 Making migrations first"
-python manage.py makemigrations 2>/dev/null || echo "✅ Done"
+if [[ "$1" != "celery" ]] && [[ "$1" != "beat" ]] && [[ "$1" != "flower" ]]; then
+    wait_for_db
+    python manage.py makemigrations 2>/dev/null || echo "✅ Done"
+    python manage.py migrate --fake-initial 2>/dev/null || echo "✅ Done"
+    python manage.py migrate --run-syncdb 2>/dev/null || echo "✅ Done"
+    python manage.py migrate 2>/dev/null || echo "✅ Done"
+    python manage.py collectstatic --noinput 2>/dev/null || echo "✅ Done"
+else
+    sleep 10
+fi
 
-echo "🎭 Fake initial migrations"
-python manage.py migrate --fake-initial 2>/dev/null || echo "✅ Done"
-
-echo "🔧 Migrate with syncdb"
-python manage.py migrate --run-syncdb 2>/dev/null || echo "✅ Done"
-
-echo "🛠️ Regular migrate"
-python manage.py migrate 2>/dev/null || echo "✅ Done"
-
-echo "🎯 Static files"
-python manage.py collectstatic --noinput 2>/dev/null || echo "✅ Done"
-
-echo "🚀 Starting server immediately!"
-echo "🎉 APIs ready! Load dummy data manually later if needed"
-
-exec uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --reload
+echo "🚀 Starting: $@"
+exec "$@"

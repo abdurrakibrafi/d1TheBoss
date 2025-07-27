@@ -8,8 +8,12 @@ from django.shortcuts import get_object_or_404
 from .models import Notification, FCMToken, UserNotificationPreference
 from .serializers import *
 from .services.notification_service import NotificationService
+import logging
+from apps.core.utils.mixins import BaseResponseMixin
 
-class NotificationViewSet(viewsets.ModelViewSet):
+logger = logging.getLogger(__name__)
+
+class NotificationViewSet(BaseResponseMixin, viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
     permission_classes = [IsAuthenticated]
     
@@ -20,13 +24,13 @@ class NotificationViewSet(viewsets.ModelViewSet):
     def unread_count(self, request):
         """GET /api/notifications/unread_count/"""
         count = self.get_queryset().filter(is_read=False).count()
-        return Response({'unread_count': count})
+        return self.success_response({'unread_count': count})
     
     @action(detail=False, methods=['post'])
     def mark_all_read(self, request):
         """POST /api/notifications/mark_all_read/"""
         updated = self.get_queryset().filter(is_read=False).update(is_read=True)
-        return Response({'status': 'success', 'updated_count': updated})
+        return self.success_response({'updated_count': updated})
     
     @action(detail=True, methods=['post'])
     def mark_read(self, request, pk=None):
@@ -34,16 +38,16 @@ class NotificationViewSet(viewsets.ModelViewSet):
         notification = self.get_object()
         notification.is_read = True
         notification.save()
-        return Response({'status': 'success'})
-    
+        return self.success_response({'notification_id': notification.id})
+
     @action(detail=False, methods=['delete'])
     def clear_all(self, request):
         """DELETE /api/notifications/clear_all/"""
         deleted_count = self.get_queryset().count()
         self.get_queryset().delete()
-        return Response({'status': 'success', 'deleted_count': deleted_count})
+        return self.success_response({'deleted_count': deleted_count})
 
-class FCMTokenViewSet(viewsets.ModelViewSet):
+class FCMTokenViewSet(BaseResponseMixin, viewsets.ModelViewSet):
     serializer_class = FCMTokenSerializer
     permission_classes = [IsAuthenticated]
     
@@ -67,10 +71,10 @@ class FCMTokenViewSet(viewsets.ModelViewSet):
         if new_token:
             token_obj.token = new_token
             token_obj.save()
-            return Response({'status': 'success'})
-        return Response({'error': 'Token required'}, status=400)
+            return self.success_response({'status': 'success'})
+        return self.error_response({'error': 'Token required'}, status_code=400)
 
-class SendNotificationView(APIView):
+class SendNotificationView(BaseResponseMixin, APIView):
     """POST /api/notifications/send/ - Admin/System use"""
     permission_classes = [IsAuthenticated]
     
@@ -89,16 +93,20 @@ class SendNotificationView(APIView):
                         data=data.get('data', {})
                     )
                 except Exception as e:
-                    continue  # Log error but continue with other users
+                    logger.error(f"Failed to send notification to user {user_id}: {str(e)}")
+                    continue
             
-            return Response({
-                'status': 'success',
-                'message': f'Notifications sent to {len(data["user_ids"])} users'
-            })
+            return self.success_response(
+                message=f'Notifications sent to {len(data["user_ids"])} users'
+            )
         
-        return Response(serializer.errors, status=400)
+        return self.error_response(
+            message="Validation failed",
+            errors=serializer.errors,
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
 
-class NotificationPreferencesView(APIView):
+class NotificationPreferencesView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
@@ -107,8 +115,8 @@ class NotificationPreferencesView(APIView):
             user=request.user
         )
         serializer = NotificationPreferenceSerializer(preferences)
-        return Response(serializer.data)
-    
+        return self.success_response(serializer.data)
+
     def put(self, request):
         """PUT /api/notifications/preferences/"""
         preferences, created = UserNotificationPreference.objects.get_or_create(
@@ -117,5 +125,5 @@ class NotificationPreferencesView(APIView):
         serializer = NotificationPreferenceSerializer(preferences, data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=400)
+            return self.success_response(serializer.data)
+        return self.error_response(serializer.errors, status_code=400)

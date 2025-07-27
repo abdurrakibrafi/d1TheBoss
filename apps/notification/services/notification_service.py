@@ -1,23 +1,17 @@
-# services/notification_service.py
 from firebase_admin import messaging
 import logging
 from apps.notification.models import Notification
 from apps.accounts.models import User
-from apps.notification.task import send_push_notification, send_websocket_notification, send_email_notification
-
+from apps.notification.tasks import send_push_notification, send_websocket_notification, send_email_notification
 
 logger = logging.getLogger(__name__)
 
-
 class NotificationService:
-    
     @staticmethod
     def send_notification(user_id, title, message, notification_types=['push', 'in_app'], data=None):
-        """
-        The one method to rule them all
-        """
+        """The one method to rule them all"""
         user = User.objects.get(id=user_id)
-        preferences = getattr(user, 'usernotificationpreference', None)
+        preferences = getattr(user, 'notification_preference', None)
         
         for notif_type in notification_types:
             if NotificationService._should_send(user, notif_type, preferences):

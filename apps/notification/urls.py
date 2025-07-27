@@ -3,7 +3,8 @@ from rest_framework.routers import DefaultRouter
 from . import views
 
 router = DefaultRouter()
-router.register(r'notifications', views.NotificationViewSet, basename='notifications')
+# Use 'list' instead of empty string to avoid conflicts
+router.register(r'list', views.NotificationViewSet, basename='notifications')
 router.register(r'fcm-tokens', views.FCMTokenViewSet, basename='fcm-tokens')
 
 urlpatterns = [
