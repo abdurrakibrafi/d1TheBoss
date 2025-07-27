@@ -22,7 +22,6 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ['-created_at']
-        unique_together = ('user', 'notification_type', 'title')
 
     def __str__(self):
         return f"{self.user.email} - {self.title} ({self.notification_type})"
