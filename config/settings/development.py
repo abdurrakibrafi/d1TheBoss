@@ -77,10 +77,10 @@ CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000
 
 # Task routing (customize based on your actual task names)
-CELERY_TASK_ROUTES = {
-    'apps.notification.tasks.*': {'queue': 'notifications'},
-    'apps.chat.tasks.*': {'queue': 'realtime'},
-}
+# CELERY_TASK_ROUTES = {
+#     'apps.notification.tasks.*': {'queue': 'notifications'},
+#     'apps.chat.tasks.*': {'queue': 'realtime'},
+# }
 
 # Firebase Admin SDK
 FIREBASE_CREDENTIALS_PATH = env('FIREBASE_CREDENTIALS_PATH', default='firebase-credentials.json')
