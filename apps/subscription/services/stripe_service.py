@@ -26,6 +26,7 @@ class StripeService:
         try:
             setup_intent = stripe.SetupIntent.create(
                 customer=customer_id,
+                payment_method_types=['card'],
                 usage='off_session'
             )
             return setup_intent

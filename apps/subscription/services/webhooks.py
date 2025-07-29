@@ -1,4 +1,4 @@
-# apps/subscription/services/webhooks.py
+# apps/subscription/services/webhooks.py - Updated with zoneinfo
 import json
 import stripe
 from django.conf import settings
@@ -7,6 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.utils.decorators import method_decorator
 from django.utils import timezone
+from zoneinfo import ZoneInfo  # Python 3.9+ timezone handling
 from apps.subscription.models import UserSubscription
 import logging
 
@@ -52,16 +53,21 @@ def handle_subscription_updated(subscription):
         )
         
         user_subscription.status = subscription['status']
-        user_subscription.current_period_start = timezone.datetime.fromtimestamp(
-            subscription['current_period_start']
-        )
-        user_subscription.current_period_end = timezone.datetime.fromtimestamp(
-            subscription['current_period_end']
-        )
+        
+        # Handle period dates with proper checks
+        if subscription.get('current_period_start'):
+            user_subscription.current_period_start = timezone.datetime.fromtimestamp(
+                subscription['current_period_start'], tz=ZoneInfo("UTC")
+            )
+        
+        if subscription.get('current_period_end'):
+            user_subscription.current_period_end = timezone.datetime.fromtimestamp(
+                subscription['current_period_end'], tz=ZoneInfo("UTC")
+            )
         
         if subscription.get('canceled_at'):
             user_subscription.canceled_at = timezone.datetime.fromtimestamp(
-                subscription['canceled_at']
+                subscription['canceled_at'], tz=ZoneInfo("UTC")
             )
         
         user_subscription.save()
@@ -69,6 +75,8 @@ def handle_subscription_updated(subscription):
         
     except UserSubscription.DoesNotExist:
         logger.error(f"Subscription {subscription['id']} not found in database")
+    except Exception as e:
+        logger.error(f"Error updating subscription: {str(e)}")
 
 def handle_subscription_deleted(subscription):
     try:

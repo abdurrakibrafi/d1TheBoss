@@ -12,6 +12,7 @@ from django.conf import settings
 from apps.subscription.services.stripe_service import StripeService
 from apps.subscription.models import UserSubscription, SubscriptionPlan, PaymentMethod
 from apps.subscription.serializers import SubscriptionPlanSerializer, UserSubscriptionSerializer, PaymentMethodSerializer
+from zoneinfo import ZoneInfo
 
 # Import your existing mixin
 from apps.core.utils.mixins import BaseResponseMixin  # Adjust import path as needed
@@ -150,6 +151,7 @@ def add_payment_method(request):
     except Exception as e:
         return mixin.handle_exception(e)
 
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_subscription(request):
@@ -197,25 +199,49 @@ def create_subscription(request):
             plan.stripe_price_id,
             payment_method_id
         )
+
+        # Debug: Print subscription object (remove in production)
+        print(f"DEBUG: Subscription object: {subscription}")
+        print(f"DEBUG: Subscription status: {subscription.status}")
         
         # Update user subscription
         user_subscription.stripe_subscription_id = subscription.id
         user_subscription.subscription_plan = plan
         user_subscription.status = subscription.status
-        user_subscription.current_period_start = timezone.datetime.fromtimestamp(
-            subscription.current_period_start, tz=timezone.utc
-        )
-        user_subscription.current_period_end = timezone.datetime.fromtimestamp(
-            subscription.current_period_end, tz=timezone.utc
-        )
-        if subscription.trial_start:
+        
+        # Handle period dates - for trialing subscriptions, use billing_cycle_anchor
+         # Handle period dates - for trialing subscriptions, use billing_cycle_anchor
+        if hasattr(subscription, 'current_period_start') and subscription.current_period_start:
+            user_subscription.current_period_start = timezone.datetime.fromtimestamp(
+                subscription.current_period_start, tz=ZoneInfo("UTC")
+            )
+        elif hasattr(subscription, 'billing_cycle_anchor') and subscription.billing_cycle_anchor:
+            # For trialing subscriptions, the billing cycle anchor is when billing will start
+            user_subscription.current_period_start = timezone.datetime.fromtimestamp(
+                subscription.start_date, tz=ZoneInfo("UTC")
+            )
+            
+        if hasattr(subscription, 'current_period_end') and subscription.current_period_end:
+            user_subscription.current_period_end = timezone.datetime.fromtimestamp(
+                subscription.current_period_end, tz=ZoneInfo("UTC")
+            )
+        elif hasattr(subscription, 'billing_cycle_anchor') and subscription.billing_cycle_anchor:
+            # For trialing subscriptions, use billing_cycle_anchor as the end of trial/start of billing
+            user_subscription.current_period_end = timezone.datetime.fromtimestamp(
+                subscription.billing_cycle_anchor, tz=ZoneInfo("UTC")
+            )
+            
+        # Handle trial dates
+        if hasattr(subscription, 'trial_start') and subscription.trial_start:
             user_subscription.trial_start = timezone.datetime.fromtimestamp(
-                subscription.trial_start, tz=timezone.utc
+                subscription.trial_start, tz=ZoneInfo("UTC")
             )
-        if subscription.trial_end:
+        if hasattr(subscription, 'trial_end') and subscription.trial_end:
             user_subscription.trial_end = timezone.datetime.fromtimestamp(
-                subscription.trial_end, tz=timezone.utc
+                subscription.trial_end, tz=ZoneInfo("UTC")
             )
+            
+            
         user_subscription.save()
         
         return mixin.created_response(
@@ -224,7 +250,8 @@ def create_subscription(request):
                 'status': subscription.status,
                 'plan_name': plan.name,
                 'plan_price': str(plan.price),
-                'trial_end': user_subscription.trial_end.isoformat() if user_subscription.trial_end else None
+                'trial_end': user_subscription.trial_end.isoformat() if user_subscription.trial_end else None,
+                'current_period_end': user_subscription.current_period_end.isoformat() if user_subscription.current_period_end else None
             },
             message="Subscription created successfully"
         )
@@ -233,7 +260,12 @@ def create_subscription(request):
         return mixin.bad_request_response(
             message="Please create setup intent first"
         )
+    except KeyError as e:
+        # Log the specific missing key for debugging
+        print(f"API Exception: KeyError: {str(e)}")
+        return mixin.handle_exception(Exception(f"Missing subscription field: {str(e)}"))
     except Exception as e:
+        print(f"API Exception: {type(e).__name__}: {str(e)}")
         return mixin.handle_exception(e)
 
 @api_view(['POST'])
@@ -282,93 +314,99 @@ def list_subscription_plans(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def setup_subscription_plans(request):
-    """One-time API to create subscription plans in Stripe and DB based on Figma"""
+    """One-time API to create subscription plans in Stripe and database"""
     stripe.api_key = settings.STRIPE_SECRET_KEY
-
+    
     plans_data = [
         {
             'name': 'Explorer Pro Monthly',
             'plan_type': 'explorer_monthly',
-            'price': 11.99,
+            'price': 9.99,
             'interval': 'month',
-            'description': 'Monthly Plan - 7-Day Free Trial'
+            'description': 'Monthly subscription with 7-day free trial'
         },
         {
-            'name': 'Explorer Pro Yearly',
+            'name': 'Explorer Pro Yearly', 
             'plan_type': 'explorer_yearly',
-            'price': 79.99,
+            'price': 99.99,
             'interval': 'year',
-            'description': 'Annual Plan - Save 44% - 7-Day Free Trial'
+            'description': 'Yearly subscription with 7-day free trial (Save 25%)'
         }
     ]
-
+    
     created_plans = []
     errors = []
-
-    for plan_data in plans_data:
-        try:
-            # Check if plan already exists
-            existing_plan = SubscriptionPlan.objects.filter(plan_type=plan_data['plan_type']).first()
-            if existing_plan:
+    
+    try:
+        for plan_data in plans_data:
+            try:
+                # Check if plan already exists
+                existing_plan = SubscriptionPlan.objects.filter(
+                    plan_type=plan_data['plan_type']
+                ).first()
+                
+                if existing_plan:
+                    created_plans.append({
+                        'id': existing_plan.id,  # Include ID in response
+                        'name': plan_data['name'],
+                        'status': 'already_exists',
+                        'stripe_price_id': existing_plan.stripe_price_id,
+                        'price': str(existing_plan.price)
+                    })
+                    continue
+                
+                # Create product in Stripe
+                product = stripe.Product.create(
+                    name=plan_data['name'],
+                    description=plan_data['description']
+                )
+                
+                # Create price in Stripe
+                price = stripe.Price.create(
+                    product=product.id,
+                    unit_amount=int(plan_data['price'] * 100),  # Convert to cents
+                    currency='usd',
+                    recurring={'interval': plan_data['interval']},
+                )
+                
+                # Create in database
+                plan = SubscriptionPlan.objects.create(
+                    name=plan_data['name'],
+                    plan_type=plan_data['plan_type'],
+                    stripe_price_id=price.id,
+                    price=plan_data['price'],
+                    currency='usd',
+                    interval=plan_data['interval'],
+                    trial_period_days=7,
+                    is_active=True,
+                )
+                
                 created_plans.append({
-                    'id': existing_plan.id,
-                    'name': existing_plan.name,
-                    'status': 'already_exists',
-                    'stripe_price_id': existing_plan.stripe_price_id,
-                    'price': str(existing_plan.price),
-                    'interval': existing_plan.interval
+                    'id': plan.id,  # Include ID in response
+                    'name': plan.name,
+                    'status': 'created',
+                    'stripe_price_id': plan.stripe_price_id,
+                    'price': str(plan.price),
+                    'interval': plan.interval
                 })
-                continue
-
-            # Create Stripe Product
-            product = stripe.Product.create(
-                name=plan_data['name'],
-                description=plan_data['description']
-            )
-
-            # Create Stripe Price
-            price = stripe.Price.create(
-                product=product.id,
-                unit_amount=int(plan_data['price'] * 100),  # cents
-                currency='usd',
-                recurring={'interval': plan_data['interval']}
-            )
-
-            # Create local DB plan
-            plan = SubscriptionPlan.objects.create(
-                name=plan_data['name'],
-                plan_type=plan_data['plan_type'],
-                stripe_price_id=price.id,
-                price=plan_data['price'],
-                currency='USD',
-                interval=plan_data['interval'],
-                trial_period_days=7,
-                is_active=True
-            )
-
-            created_plans.append({
-                'id': plan.id,
-                'name': plan.name,
-                'status': 'created',
-                'stripe_price_id': plan.stripe_price_id,
-                'price': str(plan.price),
-                'interval': plan.interval
-            })
-
-        except Exception as plan_error:
-            errors.append({
-                'plan': plan_data['name'],
-                'error': str(plan_error)
-            })
-
-    return mixin.success_response(
-        data={
-            'plans': created_plans,
-            'errors': errors if errors else None,
-            'total_plans': len(created_plans)
-        },
-        message="Subscription plans setup completed"
-    )
+                
+            except Exception as plan_error:
+                errors.append({
+                    'plan': plan_data['name'],
+                    'error': str(plan_error)
+                })
+        
+        return mixin.success_response(
+            data={
+                'plans': created_plans,
+                'errors': errors if errors else None,
+                'total_plans': len(created_plans)
+            },
+            message="Subscription plans setup completed"
+        )
+        
+    except Exception as e:
+        return mixin.handle_exception(e)
 
 @api_view(['GET'])
 def check_existing_plans(request):
@@ -399,7 +437,9 @@ def check_existing_plans(request):
         )
     except Exception as e:
         return mixin.handle_exception(e)
+    
 
+    
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def switch_subscription(request):
@@ -439,21 +479,50 @@ def switch_subscription(request):
             new_plan.stripe_price_id
         )
         
-        # Update our database
+        # Update our database with the new plan
         user_subscription.subscription_plan = new_plan
-        user_subscription.current_period_start = timezone.datetime.fromtimestamp(
-            updated_subscription.current_period_start, tz=timezone.utc
-        )
-        user_subscription.current_period_end = timezone.datetime.fromtimestamp(
-            updated_subscription.current_period_end, tz=timezone.utc
-        )
-        user_subscription.save()
+        user_subscription.status = updated_subscription.status
         
+        # Handle period dates with proper checks (same as create function)
+        if hasattr(updated_subscription, 'current_period_start') and updated_subscription.current_period_start:
+            user_subscription.current_period_start = timezone.datetime.fromtimestamp(
+                updated_subscription.current_period_start, tz=ZoneInfo("UTC")
+            )
+        elif hasattr(updated_subscription, 'billing_cycle_anchor') and updated_subscription.billing_cycle_anchor:
+            # For trialing subscriptions, the billing cycle anchor is when billing will start
+            user_subscription.current_period_start = timezone.datetime.fromtimestamp(
+                updated_subscription.start_date, tz=ZoneInfo("UTC")
+            )
+            
+        if hasattr(updated_subscription, 'current_period_end') and updated_subscription.current_period_end:
+            user_subscription.current_period_end = timezone.datetime.fromtimestamp(
+                updated_subscription.current_period_end, tz=ZoneInfo("UTC")
+            )
+        elif hasattr(updated_subscription, 'billing_cycle_anchor') and updated_subscription.billing_cycle_anchor:
+            # For trialing subscriptions, use billing_cycle_anchor as the end of trial/start of billing
+            user_subscription.current_period_end = timezone.datetime.fromtimestamp(
+                updated_subscription.billing_cycle_anchor, tz=ZoneInfo("UTC")
+            )
+            
+        # Handle trial dates (important for switches during trial period)
+        if hasattr(updated_subscription, 'trial_start') and updated_subscription.trial_start:
+            user_subscription.trial_start = timezone.datetime.fromtimestamp(
+                updated_subscription.trial_start, tz=ZoneInfo("UTC")
+            )
+        if hasattr(updated_subscription, 'trial_end') and updated_subscription.trial_end:
+            user_subscription.trial_end = timezone.datetime.fromtimestamp(
+                updated_subscription.trial_end, tz=ZoneInfo("UTC")
+            )
+        
+        user_subscription.save()
+                
         return mixin.success_response(
             data={
                 'new_plan': new_plan.name,
                 'new_price': str(new_plan.price),
-                'next_billing_date': user_subscription.current_period_end.isoformat()
+                'status': updated_subscription.status,
+                'trial_end': user_subscription.trial_end.isoformat() if user_subscription.trial_end else None,
+                'next_billing_date': user_subscription.current_period_end.isoformat() if user_subscription.current_period_end else None
             },
             message=f"Subscription switched to {new_plan.name}"
         )
@@ -462,5 +531,10 @@ def switch_subscription(request):
         return mixin.not_found_response(
             message="No subscription found"
         )
+    except KeyError as e:
+        # Log the specific missing key for debugging
+        print(f"Switch API Exception: KeyError: {str(e)}")
+        return mixin.handle_exception(Exception(f"Missing subscription field: {str(e)}"))
     except Exception as e:
+        print(f"Switch API Exception: {type(e).__name__}: {str(e)}")
         return mixin.handle_exception(e)

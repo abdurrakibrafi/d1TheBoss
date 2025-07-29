@@ -38,6 +38,7 @@ from .serializers import (
 from apps.accounts.utils.send_otp_email import send_otp_email
 from django.conf import settings
 from apps.core.utils.mixins import BaseResponseMixin
+from apps.notification.services.notification_service import NotificationService
 
 
 User = get_user_model()
@@ -410,8 +411,16 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
             data = serializer.data
             data["email"] = request.user.email
 
+            # NotificationService.send_notification(
+            #         user_id=request.user.id,
+            #         title="Syful bhai what's uppp!👋",
+            #         message="I am in profile.. ....🔔 ",
+            #         notification_types=['push', 'in_app', 'email'],
+            #         data={"action": "profile_update"}
+            # )
+
             return self.success_response(
-                data=data, message="Profile retrieved successfully"
+                data=data, message="Profile retrieved successfully" 
             )
 
         except Exception as e:
@@ -441,10 +450,20 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
                         message="Profile updated. Please verify your new email address.",
                         action_required="EMAIL_VERIFICATION",
                     )
+                
 
                 # Regular profile update
                 response_data = self.get_serializer(updated_profile).data
                 response_data["email"] = request.user.email
+
+                
+                NotificationService.send_notification(
+                    user_id=request.user.id,
+                    title="Profile Updated!",
+                    message="Your profile was just updated. Keep shining!",
+                    notification_types=['push', 'in_app', 'email'],
+                    data={"action": "profile_update"}
+                )
 
                 return self.success_response(
                     data=response_data, message="Profile updated successfully"
@@ -488,6 +507,15 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
                 # Regular profile update
                 response_data = self.get_serializer(updated_profile).data
                 response_data["email"] = request.user.email
+
+                NotificationService.send_notification(
+                    user_id=request.user.id,
+                    title="Profile Updated!",
+                    message="Your profile was just updated. Keep shining!",
+                    notification_types=['push', 'in_app', 'email'],
+                    data={"action": "profile_update"}
+                )
+
 
                 return self.success_response(
                     data=response_data, message="Profile updated successfully"

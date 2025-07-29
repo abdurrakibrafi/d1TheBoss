@@ -18,6 +18,13 @@ from rest_framework.response import Response
 class NotificationViewSet(BaseResponseMixin, viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
     permission_classes = [IsAuthenticated]
+    
+    def destroy(self, request, *args, **kwargs):
+        """Delete a notification by id and return a success response"""
+        instance = self.get_object()
+        notification_id = instance.id
+        self.perform_destroy(instance)
+        return self.success_response({'deleted_id': notification_id, 'message': 'Notification deleted successfully'})
 
     def get_queryset(self):
         return Notification.objects.filter(user=self.request.user).order_by('-created_at')

@@ -22,6 +22,77 @@ from apps.checkin.serializers import (
     WeeklyCheckinResponseSerializer,
     )
 from apps.core.utils.mixins import BaseResponseMixin
+from apps.notification.services.notification_service import NotificationService
+
+class StreakNotificationService:
+    
+    @staticmethod
+    def get_streak_notification_data(current_streak, milestone_reached=False):
+        """Get notification data based on streak patterns"""
+        
+        if milestone_reached:
+            # Milestone notifications (weekly achievements)
+            milestone_messages = [
+                {
+                    "title": "🎉 Celebrate the Milestone!",
+                    "message": f"You've hit {current_streak // 7} weekly check-ins in a row! Your consistency is building something powerful. Stay connected and see what's next!"
+                },
+                {
+                    "title": "🔥 Incredible Achievement!",
+                    "message": f"Week {current_streak // 7} completed! You're crushing your faith journey. Keep the momentum going!"
+                },
+                {
+                    "title": "⭐ Amazing Progress!",
+                    "message": f"You've maintained {current_streak} days of consistency! Your dedication is inspiring."
+                }
+            ]
+            return milestone_messages[0]  # You can randomize this
+        
+        else:
+            # Daily streak notifications with dynamic patterns
+            if current_streak <= 7:
+                # Early days - more encouraging
+                return {
+                    "title": "🔥 Keep Your Streak Burning!",
+                    "message": f"Your faith journey is on fire! You're at {current_streak} days strong — keep it going! Check in today to grow deeper and stay on track."
+                }
+            elif current_streak <= 14:
+                # Second week - building habit
+                return {
+                    "title": "💪 Momentum Building!",
+                    "message": f"Day {current_streak} and you're unstoppable! Your consistency is creating lasting change. Don't break the chain!"
+                }
+            elif current_streak <= 30:
+                # Month milestone approaching
+                return {
+                    "title": "🚀 On Fire!",
+                    "message": f"{current_streak} days of dedication! You're building something incredible. Keep pushing forward!"
+                }
+            else:
+                # Long-term streaks
+                return {
+                    "title": "🏆 Legendary Streak!",
+                    "message": f"Day {current_streak}! Your commitment is extraordinary. You're an inspiration to others on this journey!"
+                }
+
+    @staticmethod
+    def send_streak_notification(user, current_streak, is_milestone=False):
+        """Send streak-based notification"""
+        notification_data = StreakNotificationService.get_streak_notification_data(
+            current_streak, is_milestone
+        )
+        
+        NotificationService.send_notification(
+            user_id=user.id,
+            title=notification_data["title"],
+            message=notification_data["message"],
+            notification_types=['push', 'in_app'],
+            data={
+                "action": "streak_update",
+                "current_streak": current_streak,
+                "is_milestone": is_milestone
+            }
+        )
 
 class DailyCheckinAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
@@ -64,6 +135,13 @@ class DailyCheckinAPIView(BaseResponseMixin, APIView):
             streak_day=user_streak.current_streak
         )
         
+        # **ADD THIS - Send streak notifications on specific days**
+        notification_days = [3, 7, 14, 21, 30, 45, 60, 90]
+        if user_streak.current_streak in notification_days:
+            StreakNotificationService.send_streak_notification(
+                user, user_streak.current_streak, is_milestone=False
+            )
+        
         # Check for badge milestones
         self._check_and_award_badges(user, user_streak.current_streak)
         
@@ -102,16 +180,15 @@ class DailyCheckinAPIView(BaseResponseMixin, APIView):
             existing_weeks = UserWeeklyCheckin.objects.filter(user=user).values_list('week_number', flat=True)
             next_week_num = max(existing_weeks) + 1 if existing_weeks else 1
         
-                # Create weekly check-in for the next available week
+            # Create weekly check-in for the next available week
             weekly_checkin, created = UserWeeklyCheckin.objects.get_or_create(
-                    user=user,
-                    week_number=next_week_num,
-                    defaults={'is_available': True, 'is_completed': False}
-                )
+                user=user,
+                week_number=next_week_num,
+                defaults={'is_available': True, 'is_completed': False}
+            )
                         
             if created:
                 print(f"Created Week {next_week_num} checkin for user {user.id} at {current_streak} days streak")
-
 
 class CalendarDataAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
@@ -204,69 +281,73 @@ class WeeklyCheckinQuestionsAPIView(BaseResponseMixin, APIView):
     
 
 class WeeklyCheckinSubmitAPIView(BaseResponseMixin, APIView):
-   permission_classes = [IsAuthenticated]
-   
-   def post(self, request):
-       """Submit weekly checkin responses"""
-       user = request.user
-       weekly_checkin_id = request.data.get('weekly_checkin_id')
-       responses = request.data.get('responses', [])  # [{'question': 1, 'selected_option': 2}, ...]
-       
-       try:
-           weekly_checkin = UserWeeklyCheckin.objects.get(
-               id=weekly_checkin_id,
-               user=user,
-               is_available=True,
-               is_completed=False
-           )
-       except UserWeeklyCheckin.DoesNotExist:
-           return self.error_response({
-               'error': 'Weekly check-in not available'
-           }, status=status.HTTP_400_BAD_REQUEST)
-       
-       # Check if responses already exist
-       existing_responses = UserWeeklyCheckinResponse.objects.filter(weekly_checkin=weekly_checkin)
-       if existing_responses.exists():
-           # Just mark as completed if responses exist but not marked complete
-           weekly_checkin.is_completed = True
-           weekly_checkin.completed_at = timezone.now()
-           weekly_checkin.save()
-           
-           return self.success_response({
-               'message': 'Weekly check-in already completed',
-               'week_number': weekly_checkin.week_number
-           }, status=status.HTTP_200_OK)
-       
-       # Validate all 10 questions answered
-       if len(responses) != 10:
-           return self.error_response({
-               'error': 'All 10 questions must be answered'
-           }, status=status.HTTP_400_BAD_REQUEST)
-       
-       # Save responses
-       try:
-           for response_data in responses:
-               UserWeeklyCheckinResponse.objects.create(
-                   weekly_checkin=weekly_checkin,
-                   question_id=response_data['question'],
-                   selected_option_id=response_data['selected_option']
-               )
-           
-           # Mark as completed
-           weekly_checkin.is_completed = True
-           weekly_checkin.completed_at = timezone.now()
-           weekly_checkin.save()
-           
-           return self.success_response({
-               'message': 'Weekly check-in completed successfully',
-               'week_number': weekly_checkin.week_number
-           }, status=status.HTTP_201_CREATED)
-           
-       except Exception as e:
-           return self.error_response({
-               'error': f'Failed to save responses: {str(e)}'
-           }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-       
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """Submit weekly checkin responses"""
+        user = request.user
+        weekly_checkin_id = request.data.get('weekly_checkin_id')
+        responses = request.data.get('responses', [])  # [{'question': 1, 'selected_option': 2}, ...]
+        
+        try:
+            weekly_checkin = UserWeeklyCheckin.objects.get(
+                id=weekly_checkin_id,
+                user=user,
+                is_available=True,
+                is_completed=False
+            )
+        except UserWeeklyCheckin.DoesNotExist:
+            return self.error_response({
+                'error': 'Weekly check-in not available'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if responses already exist
+        existing_responses = UserWeeklyCheckinResponse.objects.filter(weekly_checkin=weekly_checkin)
+        if existing_responses.exists():
+            # Just mark as completed if responses exist but not marked complete
+            weekly_checkin.is_completed = True
+            weekly_checkin.completed_at = timezone.now()
+            weekly_checkin.save()
+            
+            return self.success_response({
+                'message': 'Weekly check-in already completed',
+                'week_number': weekly_checkin.week_number
+            }, status=status.HTTP_200_OK)
+        
+        # Validate all 10 questions answered
+        if len(responses) != 10:
+            return self.error_response({
+                'error': 'All 10 questions must be answered'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Save responses
+        try:
+            for response_data in responses:
+                UserWeeklyCheckinResponse.objects.create(
+                    weekly_checkin=weekly_checkin,
+                    question_id=response_data['question'],
+                    selected_option_id=response_data['selected_option']
+                )
+            
+            # Mark as completed
+            weekly_checkin.is_completed = True
+            weekly_checkin.completed_at = timezone.now()
+            weekly_checkin.save()
+            
+            # **ADD THIS - Send milestone celebration notification**
+            StreakNotificationService.send_streak_notification(
+                user, user.streak.current_streak, is_milestone=True
+            )
+            
+            return self.success_response({
+                'message': 'Weekly check-in completed successfully',
+                'week_number': weekly_checkin.week_number
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return self.error_response({
+                'error': f'Failed to save responses: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
        
 
 class WeeklyCheckinHistoryAPIView(APIView):
