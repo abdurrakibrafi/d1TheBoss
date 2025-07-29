@@ -36,6 +36,7 @@ urlpatterns = [
     path("api/checkin/", include("apps.checkin.urls")),
     path("api/goals/", include("apps.goal.urls")),
     path("api/notifications/", include("apps.notification.urls")),
+    path("api/subscription/", include("apps.subscription.urls")),
 ]
 
 

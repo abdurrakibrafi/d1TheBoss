@@ -41,7 +41,8 @@ def send_push_notification(self, notification_id):
             tokens=list(tokens),
         )
         
-        response = messaging.send_multicast(message)
+        # FIXED: Use send_each_for_multicast instead of send_multicast
+        response = messaging.send_each_for_multicast(message)
         
         # Handle failed tokens
         _handle_failed_tokens(response, tokens, notification.user)
