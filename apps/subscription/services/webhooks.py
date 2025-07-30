@@ -10,6 +10,7 @@ from django.utils import timezone
 from zoneinfo import ZoneInfo  # Python 3.9+ timezone handling
 from apps.subscription.models import UserSubscription
 import logging
+from apps.notification.services.notification_service import NotificationService
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,38 @@ def handle_subscription_updated(subscription):
             )
         
         user_subscription.save()
+
+           # 🔔 CHECK IF TRIAL IS ENDING SOON (2 days before)
+        if (user_subscription.status == 'trialing' and 
+            user_subscription.trial_end and 
+            user_subscription.days_until_trial_end <= 2):
+            
+            NotificationService.send_notification(
+                user_id=user_subscription.user.id,
+                title="Trial Ending Soon! ⏰",
+                message=f"Your free trial ends in {user_subscription.days_until_trial_end} days. Add a payment method to continue.",
+                notification_types=['push', 'in_app', 'email'],
+                data={
+                    'type': 'trial_ending',
+                    'days_left': user_subscription.days_until_trial_end
+                }
+            )
+        
+        # 🔔 TRIAL ENDED - NOW ACTIVE
+        elif (subscription['status'] == 'active' and 
+              user_subscription.status == 'trialing'):
+            
+            NotificationService.send_notification(
+                user_id=user_subscription.user.id,
+                title="Payment Successful! ✅",
+                message="Your subscription is now active. Welcome to Explorer Pro!",
+                notification_types=['push', 'in_app'],
+                data={
+                    'type': 'subscription_activated',
+                    'plan_name': user_subscription.subscription_plan.name
+                }
+            )
+        
         logger.info(f"Updated subscription {subscription['id']}")
         
     except UserSubscription.DoesNotExist:
@@ -97,6 +130,20 @@ def handle_payment_succeeded(invoice):
         if subscription_id:
             user_sub = UserSubscription.objects.get(stripe_subscription_id=subscription_id)
             user_sub.mark_payment_success()
+
+            # 🔔 MONTHLY/YEARLY PAYMENT SUCCESS
+            NotificationService.send_notification(
+                user_id=user_sub.user.id,
+                title="Payment Successful! 💳",
+                message=f"Your {user_sub.subscription_plan.name} subscription has been renewed.",
+                notification_types=['push', 'in_app'],
+                data={
+                    'type': 'payment_success',
+                    'amount': str(user_sub.subscription_plan.price),
+                    'next_billing': user_sub.current_period_end.isoformat() if user_sub.current_period_end else None
+                }
+            )
+
             logger.info(f"Payment succeeded for subscription {subscription_id}")
     except UserSubscription.DoesNotExist:
         logger.error(f"Subscription {subscription_id} not found for successful payment")
@@ -107,6 +154,18 @@ def handle_payment_failed(invoice):
     try:
         subscription_id = invoice['subscription']
         if subscription_id:
+            user_sub = UserSubscription.objects.get(stripe_subscription_id=subscription_id)
+            # 🔔 PAYMENT FAILED NOTIFICATION
+            NotificationService.send_notification(
+                user_id=user_sub.user.id,
+                title="Payment Failed ❌",
+                message="Your payment couldn't be processed. Please update your payment method to avoid service interruption.",
+                notification_types=['push', 'in_app', 'email'],
+                data={
+                    'type': 'payment_failed',
+                    'action_required': 'update_payment_method'
+                }
+            )
             logger.info(f"Payment failed for subscription {subscription_id}")
             # Add any specific logic for failed payments here
     except Exception as e:

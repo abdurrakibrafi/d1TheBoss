@@ -13,7 +13,7 @@ from apps.subscription.services.stripe_service import StripeService
 from apps.subscription.models import UserSubscription, SubscriptionPlan, PaymentMethod
 from apps.subscription.serializers import SubscriptionPlanSerializer, UserSubscriptionSerializer, PaymentMethodSerializer
 from zoneinfo import ZoneInfo
-
+from apps.notification.services.notification_service import NotificationService
 # Import your existing mixin
 from apps.core.utils.mixins import BaseResponseMixin  # Adjust import path as needed
 
@@ -243,6 +243,18 @@ def create_subscription(request):
             
             
         user_subscription.save()
+
+        NotificationService.send_notification(
+        user_id=request.user.id,
+        title="Welcome to HRlynx! 🦊", 
+        message=f"Your {plan.name} subscription is now active with a 7-day free trial!",
+        notification_types=['push', 'in_app'],
+        data={
+            'type': 'subscription_created',
+            'plan_name': plan.name,
+            'trial_end': user_subscription.trial_end.isoformat() if user_subscription.trial_end else None
+            }
+        )
         
         return mixin.created_response(
             data={
@@ -286,6 +298,17 @@ def cancel_subscription(request):
         
         user_subscription.canceled_at = timezone.now()
         user_subscription.save()
+
+        NotificationService.send_notification(
+        user_id=request.user.id,
+        title="Subscription Cancelled 🚫",
+        message=f"Your subscription will remain active until {user_subscription.current_period_end.strftime('%B %d, %Y')}",
+        notification_types=['push', 'in_app', 'email'],
+        data={
+            'type': 'subscription_cancelled',
+            'access_until': user_subscription.current_period_end.isoformat()
+        }
+        )
         
         return mixin.success_response(
             message="Subscription canceled successfully"
@@ -515,7 +538,18 @@ def switch_subscription(request):
             )
         
         user_subscription.save()
-                
+
+        NotificationService.send_notification(
+        user_id=request.user.id,
+        title="Plan Updated! 🔄",
+        message=f"Successfully switched to {new_plan.name}!",
+        notification_types=['push', 'in_app'],
+        data={
+            'type': 'plan_switched',
+            'new_plan': new_plan.name,
+            'new_price': str(new_plan.price)
+        }
+        )
         return mixin.success_response(
             data={
                 'new_plan': new_plan.name,
