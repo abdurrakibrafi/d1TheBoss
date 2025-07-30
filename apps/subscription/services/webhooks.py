@@ -126,12 +126,11 @@ def handle_subscription_deleted(subscription):
 
 def handle_payment_succeeded(invoice):
     try:
-        subscription_id = invoice['subscription']
+        subscription_id = invoice.get('subscription')  # Use .get() instead of ['subscription']
         if subscription_id:
             user_sub = UserSubscription.objects.get(stripe_subscription_id=subscription_id)
             user_sub.mark_payment_success()
 
-            # 🔔 MONTHLY/YEARLY PAYMENT SUCCESS
             NotificationService.send_notification(
                 user_id=user_sub.user.id,
                 title="Payment Successful! 💳",
@@ -143,19 +142,21 @@ def handle_payment_succeeded(invoice):
                     'next_billing': user_sub.current_period_end.isoformat() if user_sub.current_period_end else None
                 }
             )
-
             logger.info(f"Payment succeeded for subscription {subscription_id}")
+        else:
+            logger.info("Invoice payment succeeded but no subscription ID found")
     except UserSubscription.DoesNotExist:
         logger.error(f"Subscription {subscription_id} not found for successful payment")
     except Exception as e:
         logger.error(f"Error handling payment success: {str(e)}")
 
+
+
 def handle_payment_failed(invoice):
     try:
-        subscription_id = invoice['subscription']
+        subscription_id = invoice.get('subscription')  # Use .get() instead of ['subscription']
         if subscription_id:
             user_sub = UserSubscription.objects.get(stripe_subscription_id=subscription_id)
-            # 🔔 PAYMENT FAILED NOTIFICATION
             NotificationService.send_notification(
                 user_id=user_sub.user.id,
                 title="Payment Failed ❌",
@@ -167,6 +168,9 @@ def handle_payment_failed(invoice):
                 }
             )
             logger.info(f"Payment failed for subscription {subscription_id}")
-            # Add any specific logic for failed payments here
+        else:
+            logger.info("Invoice payment failed but no subscription ID found")
+    except UserSubscription.DoesNotExist:
+        logger.error(f"Subscription {subscription_id} not found for failed payment")
     except Exception as e:
         logger.error(f"Error handling payment failure: {str(e)}")
