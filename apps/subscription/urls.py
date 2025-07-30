@@ -23,7 +23,6 @@ urlpatterns = [
     # Webhooks
     path('webhooks/stripe/', webhooks.stripe_webhook, name='stripe-webhook'),
 
-
     # Add to urls.py (ONLY for testing)
     path('test/create-payment-method/', tests.create_test_payment_method, name='test-payment-method'),
     path('test/create-multiple-payment-methods/', tests.create_multiple_test_payment_methods, name='test-multiple-payment-methods'),
