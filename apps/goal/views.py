@@ -1,4 +1,4 @@
-# views.py - Goal tracking views with BaseResponseMixin
+# apps/goals/views.py
 
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
@@ -10,46 +10,60 @@ from datetime import timedelta, date
 from django.db import transaction
 from .models import UserGoal, ChapterRead, ConversationInteraction, ShareActivity
 from .serializers import UserGoalSerializer
-from apps.core.utils.mixins import BaseResponseMixin  
+from apps.core.utils.mixins import BaseResponseMixin
 
 
-# Option 1: Convert function-based views to class-based views (Recommended)
 class TrackScriptureReadingView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         """API to track when user reads scripture"""
         try:
-            # Create chapter read record (simple)
+            # Create chapter read record
             ChapterRead.objects.create(
                 user=request.user,
                 bible_id='bible',
-                chapter_id=f'chapter_{timezone.now().timestamp()}'  # Simple unique value
+                chapter_id=f'chapter_{timezone.now().timestamp()}'
             )
             
-            # Update scripture goal
-            today = timezone.now().date()
-            week_start = today - timedelta(days=today.weekday())
+            # Get user's weekly goal
+            goal, created = UserGoal.get_or_create_weekly_goal(request.user)
             
-            goal, created = UserGoal.objects.get_or_create(
-                user=request.user,
-                goal_type='scripture',
-                week_start=week_start,
-                defaults={'target_count': 25}
-            )
-            
-            completed = goal.increment_count()
-            
-            data = {
-                'goal_completed': completed,
-                'current_count': goal.current_count,
-                'target_count': goal.target_count
-            }
-            
-            return self.success_response(
-                data=data,
-                message="Scripture reading tracked successfully"
-            )
+            # Only increment if this week's goal is scripture
+            if goal.goal_type == 'scripture':
+                completed = goal.increment_count()
+                
+                data = {
+                    'goal_completed': completed,
+                    'current_count': goal.current_count,
+                    'target_count': goal.target_count,
+                    'goal_type': goal.goal_type,
+                    'goal_display': goal.get_goal_type_display(),
+                    'progress_percentage': goal.progress_percentage(),
+                    'activity_counted': True
+                }
+                
+                return self.success_response(
+                    data=data,
+                    message="Scripture reading tracked and counted toward your weekly goal!"
+                )
+            else:
+                # Still record the activity but don't count toward goal
+                data = {
+                    'goal_completed': goal.completed,
+                    'current_count': goal.current_count,
+                    'target_count': goal.target_count,
+                    'goal_type': goal.goal_type,
+                    'goal_display': goal.get_goal_type_display(),
+                    'progress_percentage': goal.progress_percentage(),
+                    'activity_counted': False,
+                    'message': f'Great job reading! This week your focus is {goal.get_goal_type_display()}'
+                }
+                
+                return self.success_response(
+                    data=data,
+                    message="Scripture reading recorded!"
+                )
             
         except Exception as exc:
             return self.handle_exception(exc)
@@ -61,37 +75,51 @@ class TrackConversationInteractionView(BaseResponseMixin, APIView):
     def post(self, request):
         """API to track when user gives thumbs up"""
         try:
-            # Create interaction record (simple)
+            # Create interaction record
             ConversationInteraction.objects.create(
                 user=request.user,
                 content_type='conversation',
-                content_id='thumbs_up',  # Simple fixed value
+                content_id='thumbs_up',
                 interaction_type='thumbs_up'
             )
             
-            # Update conversation goal
-            today = timezone.now().date()
-            week_start = today - timedelta(days=today.weekday())
+            # Get user's weekly goal
+            goal, created = UserGoal.get_or_create_weekly_goal(request.user)
             
-            goal, created = UserGoal.objects.get_or_create(
-                user=request.user,
-                goal_type='conversation',
-                week_start=week_start,
-                defaults={'target_count': 10}
-            )
-            
-            completed = goal.increment_count()
-            
-            data = {
-                'goal_completed': completed,
-                'current_count': goal.current_count,
-                'target_count': goal.target_count
-            }
-            
-            return self.success_response(
-                data=data,
-                message="Conversation interaction tracked successfully"
-            )
+            # Only increment if this week's goal is conversation
+            if goal.goal_type == 'conversation':
+                completed = goal.increment_count()
+                
+                data = {
+                    'goal_completed': completed,
+                    'current_count': goal.current_count,
+                    'target_count': goal.target_count,
+                    'goal_type': goal.goal_type,
+                    'goal_display': goal.get_goal_type_display(),
+                    'progress_percentage': goal.progress_percentage(),
+                    'activity_counted': True
+                }
+                
+                return self.success_response(
+                    data=data,
+                    message="Conversation interaction tracked and counted toward your weekly goal!"
+                )
+            else:
+                data = {
+                    'goal_completed': goal.completed,
+                    'current_count': goal.current_count,
+                    'target_count': goal.target_count,
+                    'goal_type': goal.goal_type,
+                    'goal_display': goal.get_goal_type_display(),
+                    'progress_percentage': goal.progress_percentage(),
+                    'activity_counted': False,
+                    'message': f'Great engagement! This week your focus is {goal.get_goal_type_display()}'
+                }
+                
+                return self.success_response(
+                    data=data,
+                    message="Conversation interaction recorded!"
+                )
             
         except Exception as exc:
             return self.handle_exception(exc)
@@ -103,41 +131,54 @@ class TrackShareActivityView(BaseResponseMixin, APIView):
     def post(self, request):
         """API to track when user shares content"""
         try:
-            # Generate unique content_id automatically
             import time
-            content_id = f'share_{int(time.time() * 1000)}'  # More unique with milliseconds
+            content_id = f'share_{int(time.time() * 1000)}'
             
-            # Create share record (simple)
+            # Create share record
             ShareActivity.objects.create(
                 user=request.user,
                 content_type='share',
                 content_id=content_id,
-                share_platform='app'
+                share_platform=request.data.get('platform', 'app')
             )
             
-            # Update share goal
-            today = timezone.now().date()
-            week_start = today - timedelta(days=today.weekday())
+            # Get user's weekly goal
+            goal, created = UserGoal.get_or_create_weekly_goal(request.user)
             
-            goal, created = UserGoal.objects.get_or_create(
-                user=request.user,
-                goal_type='share_faith',
-                week_start=week_start,
-                defaults={'target_count': 10}
-            )
-            
-            completed = goal.increment_count()
-            
-            data = {
-                'goal_completed': completed,
-                'current_count': goal.current_count,
-                'target_count': goal.target_count
-            }
-            
-            return self.success_response(
-                data=data,
-                message="Share activity tracked successfully"
-            )
+            # Only increment if this week's goal is share_faith
+            if goal.goal_type == 'share_faith':
+                completed = goal.increment_count()
+                
+                data = {
+                    'goal_completed': completed,
+                    'current_count': goal.current_count,
+                    'target_count': goal.target_count,
+                    'goal_type': goal.goal_type,
+                    'goal_display': goal.get_goal_type_display(),
+                    'progress_percentage': goal.progress_percentage(),
+                    'activity_counted': True
+                }
+                
+                return self.success_response(
+                    data=data,
+                    message="Share activity tracked and counted toward your weekly goal!"
+                )
+            else:
+                data = {
+                    'goal_completed': goal.completed,
+                    'current_count': goal.current_count,
+                    'target_count': goal.target_count,
+                    'goal_type': goal.goal_type,
+                    'goal_display': goal.get_goal_type_display(),
+                    'progress_percentage': goal.progress_percentage(),
+                    'activity_counted': False,
+                    'message': f'Great sharing! This week your focus is {goal.get_goal_type_display()}'
+                }
+                
+                return self.success_response(
+                    data=data,
+                    message="Share activity recorded!"
+                )
             
         except Exception as exc:
             return self.handle_exception(exc)
@@ -147,46 +188,36 @@ class GetCurrentWeekGoalsView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        """Get current week goals (7 days - Monday to Sunday)"""
+        """Get current week's single goal based on user's faith preferences"""
         try:
+            # Get user's weekly goal
+            goal, created = UserGoal.get_or_create_weekly_goal(request.user)
+            
             today = timezone.now().date()
-            week_start = today - timedelta(days=today.weekday())  # Monday
-            week_end = week_start + timedelta(days=6)  # Sunday
+            week_start = goal.week_start
+            week_end = week_start + timedelta(days=6)
             
-            # Create goals for current week if they don't exist
-            for goal_type_key in ['scripture', 'conversation', 'share_faith']:
-                target = 25 if goal_type_key == 'scripture' else 10
-                UserGoal.objects.get_or_create(
-                    user=request.user,
-                    goal_type=goal_type_key,
-                    week_start=week_start,
-                    defaults={'target_count': target}
-                )
-            
-            # Get current week goals
-            goals = UserGoal.objects.filter(user=request.user, week_start=week_start)
-            
-            goals_data = []
-            for goal in goals:
-                goals_data.append({
-                    'goal_type': goal.goal_type,
-                    'goal_display': goal.get_goal_type_display(),
-                    'current_count': goal.current_count,
-                    'target_count': goal.target_count,
-                    'completed': goal.completed,
-                    'progress_percentage': round((goal.current_count / goal.target_count * 100), 1) if goal.target_count > 0 else 0
-                })
+            goal_data = {
+                'goal_type': goal.goal_type,
+                'goal_display': goal.get_goal_type_display(),
+                'current_count': goal.current_count,
+                'target_count': goal.target_count,
+                'completed': goal.completed,
+                'progress_percentage': goal.progress_percentage()
+            }
             
             data = {
                 'week_start': week_start,
                 'week_end': week_end,
-                'days_remaining': (week_end - today).days + 1 if today <= week_end else 0,
-                'goals': goals_data
+                'days_remaining': goal.days_remaining,
+                'goal': goal_data,
+                'is_new_goal': created,
+                'week_number': week_start.isocalendar()[1]  # Week number of the year
             }
             
             return self.success_response(
                 data=data,
-                message="Current week goals retrieved successfully"
+                message="Current week goal retrieved successfully"
             )
             
         except Exception as exc:
@@ -199,40 +230,27 @@ class GetGoalsHistoryView(BaseResponseMixin, APIView):
     def get(self, request):
         """Get weekly goals history"""
         try:
-            weeks = int(request.query_params.get('weeks', 8))  # Default last 8 weeks
+            weeks = int(request.query_params.get('weeks', 8))
             
-            today = timezone.now().date()
-            current_week_start = today - timedelta(days=today.weekday())
+            # Get user's goal history
+            goals_history = UserGoal.objects.filter(user=request.user).order_by('-week_start')[:weeks]
             
             history = []
-            
-            for i in range(weeks):
-                week_start = current_week_start - timedelta(weeks=i)
-                week_end = week_start + timedelta(days=6)
-                
-                # Get goals for this week
-                week_goals = UserGoal.objects.filter(user=request.user, week_start=week_start)
-                
-                if week_goals.exists():  # Only show weeks where user had activity
-                    goals_data = []
-                    for goal in week_goals:
-                        goals_data.append({
-                            'goal_type': goal.goal_type,
-                            'goal_display': goal.get_goal_type_display(),
-                            'current_count': goal.current_count,
-                            'target_count': goal.target_count,
-                            'completed': goal.completed,
-                            'progress_percentage': round((goal.current_count / goal.target_count * 100), 1) if goal.target_count > 0 else 0
-                        })
-                    
-                    week_data = {
-                        'week_start': week_start,
-                        'week_end': week_end,
-                        'is_current_week': i == 0,
-                        'goals': goals_data
+            for goal in goals_history:
+                week_data = {
+                    'week_start': goal.week_start,
+                    'week_end': goal.week_end,
+                    'week_number': goal.week_start.isocalendar()[1],
+                    'goal': {
+                        'goal_type': goal.goal_type,
+                        'goal_display': goal.get_goal_type_display(),
+                        'current_count': goal.current_count,
+                        'target_count': goal.target_count,
+                        'completed': goal.completed,
+                        'progress_percentage': goal.progress_percentage()
                     }
-                    
-                    history.append(week_data)
+                }
+                history.append(week_data)
             
             data = {
                 'total_weeks': len(history),
@@ -252,17 +270,9 @@ class SetGoalTargetView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        """API to set custom goal targets"""
+        """API to set custom goal target for current week"""
         try:
-            data = request.data
-            goal_type = data.get('goal_type')
-            target_count = data.get('target_count')
-            
-            if goal_type not in ['scripture', 'conversation', 'share_faith']:
-                return self.bad_request_response(
-                    message="Invalid goal type",
-                    errors={'goal_type': ['Must be one of: scripture, conversation, share_faith']}
-                )
+            target_count = request.data.get('target_count')
             
             if not target_count or target_count <= 0:
                 return self.bad_request_response(
@@ -270,31 +280,24 @@ class SetGoalTargetView(BaseResponseMixin, APIView):
                     errors={'target_count': ['Target count must be greater than 0']}
                 )
             
-            today = timezone.now().date()
-            week_start = today - timedelta(days=today.weekday())
+            # Get current week's goal
+            goal, created = UserGoal.get_or_create_weekly_goal(request.user)
             
-            goal, created = UserGoal.objects.get_or_create(
-                user=request.user,
-                goal_type=goal_type,
-                week_start=week_start,
-                defaults={'target_count': target_count}
-            )
-            
-            if not created:
-                goal.target_count = target_count
-                goal.save()
+            # Update target
+            goal.target_count = target_count
+            goal.save()
             
             response_data = {
-                'goal_type': goal_type,
+                'goal_type': goal.goal_type,
+                'goal_display': goal.get_goal_type_display(),
                 'target_count': goal.target_count,
-                'current_count': goal.current_count
+                'current_count': goal.current_count,
+                'progress_percentage': goal.progress_percentage()
             }
-            
-            message = "Goal target created successfully" if created else "Goal target updated successfully"
             
             return self.success_response(
                 data=response_data,
-                message=message
+                message="Goal target updated successfully"
             )
             
         except Exception as exc:
@@ -308,19 +311,9 @@ class GoalStatsView(BaseResponseMixin, APIView):
         """Get comprehensive goal statistics"""
         try:
             user = request.user
-            today = timezone.now().date()
-            week_start = today - timedelta(days=today.weekday())
             
-            # Current week stats
-            current_goals = UserGoal.objects.filter(user=user, week_start=week_start)
-            current_stats = {}
-            for goal in current_goals:
-                current_stats[goal.goal_type] = {
-                    'current_count': goal.current_count,
-                    'target_count': goal.target_count,
-                    'completed': goal.completed,
-                    'progress_percentage': round((goal.current_count / goal.target_count * 100), 1) if goal.target_count > 0 else 0
-                }
+            # Get current week goal
+            current_goal, created = UserGoal.get_or_create_weekly_goal(user)
             
             # All time stats
             all_time_stats = {
@@ -328,28 +321,39 @@ class GoalStatsView(BaseResponseMixin, APIView):
                 'total_conversations': ConversationInteraction.objects.filter(user=user).count(),
                 'total_shares': ShareActivity.objects.filter(user=user).count(),
                 'total_goals_completed': UserGoal.objects.filter(user=user, completed=True).count(),
-                'weeks_active': UserGoal.objects.filter(user=user).values('week_start').distinct().count()
+                'weeks_active': UserGoal.objects.filter(user=user).count()
+            }
+            
+            # Current week stats
+            current_week_stats = {
+                'goal_type': current_goal.goal_type,
+                'goal_display': current_goal.get_goal_type_display(),
+                'current_count': current_goal.current_count,
+                'target_count': current_goal.target_count,
+                'completed': current_goal.completed,
+                'progress_percentage': current_goal.progress_percentage(),
+                'days_remaining': current_goal.days_remaining
             }
             
             # Last 4 weeks performance
             last_4_weeks = []
-            for i in range(4):
-                week_date = week_start - timedelta(weeks=i)
-                week_goals = UserGoal.objects.filter(user=user, week_start=week_date)
+            recent_goals = UserGoal.objects.filter(user=user).order_by('-week_start')[:4]
+            
+            for goal in recent_goals:
                 week_data = {
-                    'week_start': week_date,
-                    'goals': {}
+                    'week_start': goal.week_start,
+                    'week_end': goal.week_end,
+                    'goal_type': goal.goal_type,
+                    'goal_display': goal.get_goal_type_display(),
+                    'current_count': goal.current_count,
+                    'target_count': goal.target_count,
+                    'completed': goal.completed,
+                    'progress_percentage': goal.progress_percentage()
                 }
-                for goal in week_goals:
-                    week_data['goals'][goal.goal_type] = {
-                        'current_count': goal.current_count,
-                        'target_count': goal.target_count,
-                        'completed': goal.completed
-                    }
                 last_4_weeks.append(week_data)
             
             data = {
-                'current_week': current_stats,
+                'current_week': current_week_stats,
                 'all_time': all_time_stats,
                 'last_4_weeks': last_4_weeks
             }
@@ -361,50 +365,3 @@ class GoalStatsView(BaseResponseMixin, APIView):
             
         except Exception as exc:
             return self.handle_exception(exc)
-
-
-# Option 2: If you want to keep function-based views, create a helper function
-class ResponseHelper(BaseResponseMixin):
-    """Helper class to use BaseResponseMixin methods in function-based views"""
-    pass
-
-# Helper instance
-response_helper = ResponseHelper()
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def track_scripture_reading_fbv(request):
-    """Function-based view example using response helper"""
-    try:
-        # Your existing logic here...
-        ChapterRead.objects.create(
-            user=request.user,
-            bible_id='bible',
-            chapter_id=f'chapter_{timezone.now().timestamp()}'
-        )
-        
-        today = timezone.now().date()
-        week_start = today - timedelta(days=today.weekday())
-        
-        goal, created = UserGoal.objects.get_or_create(
-            user=request.user,
-            goal_type='scripture',
-            week_start=week_start,
-            defaults={'target_count': 25}
-        )
-        
-        completed = goal.increment_count()
-        
-        data = {
-            'goal_completed': completed,
-            'current_count': goal.current_count,
-            'target_count': goal.target_count
-        }
-        
-        return response_helper.success_response(
-            data=data,
-            message="Scripture reading tracked successfully"
-        )
-        
-    except Exception as exc:
-        return response_helper.handle_exception(exc)

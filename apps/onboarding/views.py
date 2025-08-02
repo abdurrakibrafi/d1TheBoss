@@ -406,6 +406,59 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
 
     def get(self, request):
         user = request.user
+        
+        # Get all faith goals for the user grouped by question
+        faith_goals_data = []
+        user_faith_goals = FaithGoal.objects.filter(user=user).select_related(
+            'faith_goal_option__faith_goal_question'
+        )
+        
+        # Group by question
+        questions_with_selections = {}
+        for goal in user_faith_goals:
+            question = goal.faith_goal_option.faith_goal_question
+            if question not in questions_with_selections:
+                questions_with_selections[question] = {
+                    'question_id': question.id,
+                    'question_text': question.question,
+                    'selected_option_id': goal.faith_goal_option.id,
+                    'user_text': goal.text,
+                    'created_at': goal.created_at
+                }
+        
+        # Now build the complete structure with all options
+        from apps.onboarding.models import FaithGoalQuestion
+        
+        for question in FaithGoalQuestion.objects.filter(is_active=True).prefetch_related('faithgoaloption_set'):
+            options = []
+            selected_option_id = None
+            user_text = ""
+            created_at = None
+            
+            # Check if user has selection for this question
+            if question in questions_with_selections:
+                selected_option_id = questions_with_selections[question]['selected_option_id']
+                user_text = questions_with_selections[question]['user_text']
+                created_at = questions_with_selections[question]['created_at']
+            
+            # Build options list with is_selected flag
+            for option in question.faithgoaloption_set.filter(is_active=True):
+                options.append({
+                    'id': option.id,
+                    'option': option.option,
+                    'is_active': option.is_active,
+                    'is_selected': option.id == selected_option_id
+                })
+            
+            faith_goals_data.append({
+                'question_id': question.id,
+                'question': question.question,
+                'selected_option_id': selected_option_id,
+                'user_text': user_text,
+                'created_at': created_at,
+                'options': options
+            })
+
         data = {
             "journey_reason": (
                 JourneyReasonSerializer(
@@ -423,14 +476,7 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
                 if Denomination.objects.filter(user=user).exists()
                 else None
             ),
-            "faith_goal": (
-                FaithGoalSerializer(
-                    FaithGoal.objects.filter(user=user).first(),
-                    context={'request': request}
-                ).data
-                if FaithGoal.objects.filter(user=user).exists()
-                else None
-            ),
+            "faith_goals": faith_goals_data,  # Changed from faith_goal to faith_goals
             "tone_preference": (
                 TonePreferenceSerializer(
                     TonePreference.objects.filter(user=user).first(),
@@ -459,7 +505,7 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
         return self.success_response(
             data=data, message="User onboarding data fetched successfully."
         )
-
+    
     @transaction.atomic
     def patch(self, request):
         user = request.user
@@ -478,7 +524,6 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
                         context={'request': request}
                     )
                     if serializer.is_valid():
-                        # Let the serializer handle user assignment
                         serializer.save()
                         updated[field_name] = serializer.data
                     else:
@@ -486,10 +531,26 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
                 except Exception as e:
                     errors[field_name] = [f"Error updating {field_name}: {str(e)}"]
 
-        # Update each section if present in request.data
+        # Special handling for faith_goal (multiple goals)
+        if "faith_goal" in request.data:
+            try:
+                serializer = BulkFaithGoalSerializer(
+                    data=request.data["faith_goal"],
+                    context={'request': request}
+                )
+                if serializer.is_valid():
+                    serializer.save()
+                    # Return the updated faith goals in the same format as GET
+                    faith_goals_data = self._get_faith_goals_data(user)  # You'll need to extract this logic
+                    updated["faith_goal"] = faith_goals_data
+                else:
+                    errors["faith_goal"] = serializer.errors
+            except Exception as e:
+                errors["faith_goal"] = [f"Error updating faith_goal: {str(e)}"]
+
+        # Update other sections
         update_model("journey_reason", JourneyReason, JourneyReasonSerializer)
         update_model("denomination", Denomination, DenominationSerializer)
-        update_model("faith_goal", FaithGoal, FaithGoalSerializer)
         update_model("tone_preference", TonePreference, TonePreferenceSerializer)
         update_model("bible_familiarity", BibleFamiliarity, BibleFamiliaritySerializer)
         update_model("bible_version", BibleVersion, BibleVersionSerializer)
@@ -504,3 +565,56 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
         return self.success_response(
             data=updated, message="User onboarding data updated successfully."
         )
+
+    def _get_faith_goals_data(self, user):
+        """Extract the faith goals logic from GET method"""
+        faith_goals_data = []
+        user_faith_goals = FaithGoal.objects.filter(user=user).select_related(
+            'faith_goal_option__faith_goal_question'
+        )
+        
+        # Group by question
+        questions_with_selections = {}
+        for goal in user_faith_goals:
+            question = goal.faith_goal_option.faith_goal_question
+            if question not in questions_with_selections:
+                questions_with_selections[question] = {
+                    'question_id': question.id,
+                    'question_text': question.question,
+                    'selected_option_id': goal.faith_goal_option.id,
+                    'user_text': goal.text,
+                    'created_at': goal.created_at
+                }
+        
+        # Build complete structure
+        from apps.onboarding.models import FaithGoalQuestion
+        
+        for question in FaithGoalQuestion.objects.filter(is_active=True).prefetch_related('faithgoaloption_set'):
+            options = []
+            selected_option_id = None
+            user_text = ""
+            created_at = None
+            
+            if question in questions_with_selections:
+                selected_option_id = questions_with_selections[question]['selected_option_id']
+                user_text = questions_with_selections[question]['user_text']
+                created_at = questions_with_selections[question]['created_at']
+            
+            for option in question.faithgoaloption_set.filter(is_active=True):
+                options.append({
+                    'id': option.id,
+                    'option': option.option,
+                    'is_active': option.is_active,
+                    'is_selected': option.id == selected_option_id
+                })
+            
+            faith_goals_data.append({
+                'question_id': question.id,
+                'question': question.question,
+                'selected_option_id': selected_option_id,
+                'user_text': user_text,
+                'created_at': created_at,
+                'options': options
+            })
+        
+        return faith_goals_data

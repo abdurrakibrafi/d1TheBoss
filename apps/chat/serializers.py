@@ -6,7 +6,7 @@ class ChatMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatMessage
         fields = [
-            'id', 'content', 'is_user', 'bookmark', 'model_used', 
+            'id', 'content', 'is_user', 'bookmark', 'model_used', 'voice_file', 'voice_transcript', 'has_voice',
             'tokens_consumed', 'response_time', 'ai_metadata', 
             'created_at', 'updated_at'
         ]

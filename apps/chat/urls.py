@@ -4,7 +4,7 @@ from apps.chat.views import (
     ChatSessionUpdateView, ChatSessionDeleteView, BookmarkMessageView,
     BookmarkedMessagesView, RegenerateResponseView, SearchChatHistoryView,
     FavoriteChatSessionView, NeedMoreClarityView, ChatStatisticsView,
-    ExportChatHistoryView
+    ExportChatHistoryView, VoiceToTextAPIView
 )
 
 urlpatterns = [
@@ -26,4 +26,6 @@ urlpatterns = [
     path('search/', SearchChatHistoryView.as_view(), name='search-chat-history'),
     path('statistics/', ChatStatisticsView.as_view(), name='chat-statistics'),
     path('export/', ExportChatHistoryView.as_view(), name='export-chat-history'),
+    path('voice-to-text/', VoiceToTextAPIView.as_view(), name='voice-to-text'),
+
 ]

@@ -7,17 +7,16 @@ from datetime import timedelta
 
 class UserGoal(models.Model):
     GOAL_TYPES = [
-        ('scripture', 'Scripture Reading'),
-        ('share_faith', 'Share Faith'),
-        ('conversation', 'Conversation'),
+        ('scripture', 'Scripture Knowledge'),
+        ('share_faith', 'Inspiration Goal'), 
+        ('conversation', 'Confidence Goal'),
     ]
-    
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='goals')
     goal_type = models.CharField(max_length=20, choices=GOAL_TYPES)
-    target_count = models.IntegerField(default=0)  # e.g., 25 chapters, 10 shares, 10 conversations
+    target_count = models.IntegerField(default=0)
     current_count = models.IntegerField(default=0)
     completed = models.BooleanField(default=False)
-    week_start = models.DateField()  # Changed from auto_now_add to manual control
+    week_start = models.DateField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -29,7 +28,11 @@ class UserGoal(models.Model):
     
     def increment_count(self):
         """Increment the current count and check if goal is completed"""
-        self.current_count += 1
+        if self.target_count == self.current_count:
+            self.current_count
+        else:
+            self.current_count += 1
+            
         if self.current_count >= self.target_count:
             self.completed = True
         self.save()
@@ -51,12 +54,65 @@ class UserGoal(models.Model):
         """Get days remaining in the week"""
         today = timezone.now().date()
         if today > self.week_end:
-            return 0  # Week is over
+            return 0
         return (self.week_end - today).days + 1
     
     @classmethod
+    def get_or_create_weekly_goal(cls, user):
+        """Get or create this week's goal based on user's primary goal type"""
+        from .utils import get_user_primary_goal_type  # Import here to avoid circular imports
+        
+        today = timezone.now().date()
+        week_start = today - timedelta(days=today.weekday())
+        
+        # Check if goal already exists for this week
+        existing_goal = cls.objects.filter(user=user, week_start=week_start).first()
+        
+        if existing_goal:
+            return existing_goal, False
+        
+        # Determine user's primary goal type
+        primary_goal_type = get_user_primary_goal_type(user)
+        
+        # Set target based on goal type
+        target_count = 25 if primary_goal_type == 'scripture' else 10
+        
+        goal = cls.objects.create(
+            user=user,
+            goal_type=primary_goal_type,
+            week_start=week_start,
+            target_count=target_count
+        )
+        
+        return goal, True
+    
+    @classmethod
+    def update_goal_for_preference_change(cls, user):
+        """Update current week's goal when user changes their faith preferences"""
+        from .utils import get_user_primary_goal_type
+        
+        today = timezone.now().date() 
+        week_start = today - timedelta(days=today.weekday())
+        
+        current_goal = cls.objects.filter(user=user, week_start=week_start).first()
+        
+        if current_goal:
+            new_goal_type = get_user_primary_goal_type(user)
+            
+            if current_goal.goal_type != new_goal_type:
+                current_goal.goal_type = new_goal_type
+                current_goal.current_count = 0
+                current_goal.completed = False
+                current_goal.target_count = 25 if new_goal_type == 'scripture' else 10
+                current_goal.save()
+                
+                return current_goal, True
+        
+        return current_goal, False
+        
+    @classmethod
     def get_current_week_goals(cls, user):
-        """Get goals for current week"""
+        """Get goals for current week (kept for backward compatibility)"""
         today = timezone.now().date()
         week_start = today - timedelta(days=today.weekday())
         return cls.objects.filter(user=user, week_start=week_start)

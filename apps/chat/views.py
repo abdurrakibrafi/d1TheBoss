@@ -504,6 +504,7 @@ class ExportChatHistoryView(BaseResponseMixin, APIView):
                     'created_at': session.created_at.isoformat(),
                     'updated_at': session.updated_at.isoformat(),
                     'is_favorite': session.is_favorite,
+                    'message_count': session.message_count,
                     'messages': []
                 }
                 
@@ -513,8 +514,16 @@ class ExportChatHistoryView(BaseResponseMixin, APIView):
                         'content': message.content,
                         'is_user': message.is_user,
                         'bookmark': message.bookmark,
+                        'has_voice': message.has_voice,
+                        'voice_transcript': message.voice_transcript,
+                        'voice_file_url': None,
                         'created_at': message.created_at.isoformat(),
                     }
+                    
+                    # Add voice file URL if exists
+                    if message.voice_file:
+                        message_data['voice_file_url'] = message.voice_file.url
+                    
                     session_data['messages'].append(message_data)
                 
                 export_data['sessions'].append(session_data)
@@ -525,3 +534,134 @@ class ExportChatHistoryView(BaseResponseMixin, APIView):
             )
         except Exception as e:
             return self.handle_exception(e)
+        
+
+import os
+import tempfile
+import speech_recognition as sr
+from pydub import AudioSegment
+
+class VoiceToTextAPIView(BaseResponseMixin, APIView):
+    def post(self, request):
+        temp_file_path = None
+        wav_file_path = None
+        
+        try:
+            voice_file = request.FILES.get('voice_file')
+            session_id = request.data.get('session_id')
+            
+            if not voice_file:
+                return self.error_response(
+                    message='No voice file provided',
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            if not session_id:
+                return self.error_response(
+                    message='session_id is required',
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+                
+            # Check if session exists
+            try:
+                chat_session = ChatSession.objects.get(id=session_id)
+            except ChatSession.DoesNotExist:
+                return self.error_response(
+                    message='Invalid session ID',
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+                
+            # Check file size
+            if voice_file.size > 10 * 1024 * 1024:  # 10MB limit
+                return self.error_response(
+                    message='File size too large. Maximum 10MB allowed',
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Save original file temporarily
+            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                for chunk in voice_file.chunks():
+                    temp_file.write(chunk)
+                temp_file_path = temp_file.name
+            
+            # Convert any audio format to WAV using pydub
+            try:
+                audio = AudioSegment.from_file(temp_file_path)
+                wav_file_path = temp_file_path + '.wav'
+                audio.export(wav_file_path, format='wav')
+            except Exception as e:
+                return self.error_response(
+                    message=f'Invalid audio file format: {str(e)}',
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Convert voice to text
+            recognizer = sr.Recognizer()
+            with sr.AudioFile(wav_file_path) as source:
+                audio_data = recognizer.record(source)
+                text = recognizer.recognize_google(audio_data)
+            
+            # Clean up temp files
+            self._cleanup_files(temp_file_path, wav_file_path)
+            
+            if not text:
+                return self.error_response(
+                    message='No speech detected in the audio file',
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Create ChatMessage with both voice file and transcript
+            message = ChatMessage.objects.create(
+                session=chat_session,
+                content=text,  # The transcript
+                voice_transcript=text,  # Store transcript separately for clarity
+                is_user=True,
+                voice_file=voice_file,  # Save the original audio file
+                has_voice=True
+            )
+            
+            # Update session message count
+            chat_session.message_count += 1
+            chat_session.save()
+                
+            return self.success_response(
+                data={
+                    'success': True,
+                    'message_id': str(message.id),
+                    'transcript': text,
+                    'voice_url': message.voice_file.url if message.voice_file else None,
+                    'session_id': str(chat_session.id),
+                    'message': 'Voice successfully converted to text and saved'
+                },
+                status_code=status.HTTP_200_OK
+            )
+            
+        except sr.UnknownValueError:
+            self._cleanup_files(temp_file_path, wav_file_path)
+            return self.error_response(
+                message='Could not understand the audio. Please speak clearly',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+            
+        except sr.RequestError as e:
+            self._cleanup_files(temp_file_path, wav_file_path)
+            return self.error_response(
+                message=f'Speech recognition service error: {str(e)}',
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+            
+        except Exception as e:
+            self._cleanup_files(temp_file_path, wav_file_path)
+            return self.error_response(
+                message=f'An unexpected error occurred: {str(e)}',
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _cleanup_files(self, *file_paths):
+        """Clean up temporary files"""
+        for file_path in file_paths:
+            if file_path and os.path.exists(file_path):
+                try:
+                    os.unlink(file_path)
+                except:
+                    pass

@@ -40,6 +40,10 @@ class ChatMessage(models.Model):
     is_user = models.BooleanField()
     bookmark = models.BooleanField(default=False)
 
+    # VOICE FIELDS
+    voice_file = models.FileField(upload_to='chat/voice_messages/', blank=True, null=True)
+    voice_transcript = models.TextField(blank=True, null=True)  
+    has_voice = models.BooleanField(default=False)
     
     # AI metadata
     model_used = models.CharField(max_length=100, blank=True, null=True)
