@@ -13,6 +13,7 @@ from apps.onboarding.models import (
     BibleFamiliarity,
     BibleVersionOption,
     BibleVersion,
+    UserGoalPreference
 )
 from apps.accounts.models import UserProfile
 
@@ -276,3 +277,17 @@ class UserOnboardingSummarySerializer(serializers.Serializer):
     def get_bible_version(self, obj):
         version = BibleVersion.objects.filter(user=obj).first()
         return BibleVersionSerializer(version).data if version else None
+
+
+class UserGoalPreferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserGoalPreference
+        fields = ['goal_type']
+        
+    def create(self, validated_data):
+        user = self.context['request'].user
+        goal_preference, created = UserGoalPreference.objects.update_or_create(
+            user=user,
+            defaults=validated_data
+        )
+        return goal_preference

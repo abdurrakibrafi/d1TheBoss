@@ -1,6 +1,6 @@
 from django.db import models
 from django.conf import settings
-
+from apps.accounts.models import User
 
 class JourneyReasonOption(models.Model):
     option = models.CharField(max_length=250, blank=True, null=True)
@@ -263,3 +263,18 @@ class BibleVersion(models.Model):
         verbose_name_plural = "13. Bible Versions"
 
 
+
+class UserGoalPreference(models.Model):
+    GOAL_CHOICES = [
+        ('conversation', 'Confidence Goal'),
+        ('scripture', 'Scripture Knowledge'),
+        ('share_faith', 'Inspiration Goal'),
+    ]
+    
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='goal_preference')
+    goal_type = models.CharField(max_length=20, choices=GOAL_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.get_goal_type_display()}"

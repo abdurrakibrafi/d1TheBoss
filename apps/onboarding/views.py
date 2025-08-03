@@ -20,6 +20,7 @@ from apps.onboarding.serializers import (
     UserOnboardingProgressSerializer,
     UserOnboardingSummarySerializer,
     BulkFaithGoalSerializer,
+    UserGoalPreferenceSerializer
 )
 from apps.onboarding.models import (
     DenominationOption,
@@ -35,6 +36,7 @@ from apps.onboarding.models import (
     BibleFamiliarity,
     BibleVersionOption,
     BibleVersion,
+    UserGoalPreference
 )
 from rest_framework import generics, permissions, status
 from rest_framework.parsers import JSONParser
@@ -55,6 +57,8 @@ from .serializers import (
     BibleVersionSerializer,
 )
 from django.db import transaction
+from apps.goal.models import UserGoal
+
 
 
 class OnboardingOptionsView(BaseResponseMixin, generics.GenericAPIView):
@@ -65,6 +69,11 @@ class OnboardingOptionsView(BaseResponseMixin, generics.GenericAPIView):
     def get(self, request):
         try:
             data = {
+                "goal_preferences": [
+                    {"id": "conversation", "name": "Confidence Goal", "description": "Build confidence in sharing your faith"},
+                    {"id": "scripture", "name": "Scripture Knowledge", "description": "Deepen your understanding of God's word"},
+                    {"id": "share_faith", "name": "Inspiration Goal", "description": "Inspire and encourage others"}
+                ],
                 "journey_reasons": JourneyReasonOption.objects.filter(is_active=True),
                 "denominations": DenominationOption.objects.filter(
                     is_active=True
@@ -460,6 +469,14 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
             })
 
         data = {
+            "goal_preference": (
+                UserGoalPreferenceSerializer(
+                    UserGoalPreference.objects.filter(user=user).first(),
+                    context={'request': request}
+                ).data
+                if UserGoalPreference.objects.filter(user=user).exists()
+                else None
+            ),
             "journey_reason": (
                 JourneyReasonSerializer(
                     JourneyReason.objects.filter(user=user).first(),
@@ -549,12 +566,23 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
                 errors["faith_goal"] = [f"Error updating faith_goal: {str(e)}"]
 
         # Update other sections
+        update_model("goal_preference", UserGoalPreference, UserGoalPreferenceSerializer)
         update_model("journey_reason", JourneyReason, JourneyReasonSerializer)
         update_model("denomination", Denomination, DenominationSerializer)
         update_model("tone_preference", TonePreference, TonePreferenceSerializer)
         update_model("bible_familiarity", BibleFamiliarity, BibleFamiliaritySerializer)
         update_model("bible_version", BibleVersion, BibleVersionSerializer)
 
+                
+            # MOVE THIS OUTSIDE THE IF STATEMENT - trigger for ANY update that affects goals
+        if updated and not errors:
+            # Check if goal-affecting fields were updated
+            goal_affecting_fields = ['goal_preference', 'faith_goal']
+            if any(field in updated for field in goal_affecting_fields):
+                goal_updated = UserGoal.update_goal_for_preference_change(user)
+                if goal_updated[1]:  # If goal was actually updated
+                    updated['goal_updated'] = True
+                    
         if errors:
             return self.error_response(
                 message="Some fields failed to update.",
@@ -618,3 +646,5 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
             })
         
         return faith_goals_data
+    
+

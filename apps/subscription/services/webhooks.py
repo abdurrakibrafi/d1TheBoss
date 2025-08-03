@@ -1,4 +1,4 @@
-# apps/subscription/services/webhooks.py - Updated with zoneinfo
+# apps/subscription/services/webhooks.py - Updated with proper cancellation handling
 import json
 import stripe
 from django.conf import settings
@@ -53,6 +53,10 @@ def handle_subscription_updated(subscription):
             stripe_subscription_id=subscription['id']
         )
         
+        # Store previous status to detect changes
+        previous_status = user_subscription.status
+        
+        # Update status from Stripe
         user_subscription.status = subscription['status']
         
         # Handle period dates with proper checks
@@ -66,6 +70,18 @@ def handle_subscription_updated(subscription):
                 subscription['current_period_end'], tz=ZoneInfo("UTC")
             )
         
+        # Handle trial dates
+        if subscription.get('trial_start'):
+            user_subscription.trial_start = timezone.datetime.fromtimestamp(
+                subscription['trial_start'], tz=ZoneInfo("UTC")
+            )
+        
+        if subscription.get('trial_end'):
+            user_subscription.trial_end = timezone.datetime.fromtimestamp(
+                subscription['trial_end'], tz=ZoneInfo("UTC")
+            )
+        
+        # Handle cancellation timestamp
         if subscription.get('canceled_at'):
             user_subscription.canceled_at = timezone.datetime.fromtimestamp(
                 subscription['canceled_at'], tz=ZoneInfo("UTC")
@@ -73,25 +89,42 @@ def handle_subscription_updated(subscription):
         
         user_subscription.save()
 
-           # 🔔 CHECK IF TRIAL IS ENDING SOON (2 days before)
-        if (user_subscription.status == 'trialing' and 
+        # 🔔 SUBSCRIPTION WAS CANCELED (but still active until period end)
+        if (subscription['status'] == 'canceled' and 
+            previous_status != 'canceled' and
+            user_subscription.current_period_end):
+            
+            NotificationService.send_notification(
+                user_id=user_subscription.user.id,
+                title="Subscription Cancelled 🚫",
+                message=f"Your subscription will remain active until {user_subscription.current_period_end.strftime('%B %d, %Y')}",
+                notification_types=['push', 'in_app', 'email'],
+                data={
+                    'type': 'subscription_cancelled',
+                    'access_until': user_subscription.current_period_end.isoformat(),
+                    'canceled_at': user_subscription.canceled_at.isoformat() if user_subscription.canceled_at else None
+                }
+            )
+
+        # 🔔 CHECK IF TRIAL IS ENDING SOON (2 days before)
+        elif (user_subscription.status == 'trialing' and 
             user_subscription.trial_end and 
-            user_subscription.days_until_trial_end <= 2):
+            user_subscription.days_until_trial_end() <= 2):
             
             NotificationService.send_notification(
                 user_id=user_subscription.user.id,
                 title="Trial Ending Soon! ⏰",
-                message=f"Your free trial ends in {user_subscription.days_until_trial_end} days. Add a payment method to continue.",
+                message=f"Your free trial ends in {user_subscription.days_until_trial_end()} days. Add a payment method to continue.",
                 notification_types=['push', 'in_app', 'email'],
                 data={
                     'type': 'trial_ending',
-                    'days_left': user_subscription.days_until_trial_end
+                    'days_left': user_subscription.days_until_trial_end()
                 }
             )
         
         # 🔔 TRIAL ENDED - NOW ACTIVE
         elif (subscription['status'] == 'active' and 
-              user_subscription.status == 'trialing'):
+              previous_status == 'trialing'):
             
             NotificationService.send_notification(
                 user_id=user_subscription.user.id,
@@ -100,11 +133,26 @@ def handle_subscription_updated(subscription):
                 notification_types=['push', 'in_app'],
                 data={
                     'type': 'subscription_activated',
-                    'plan_name': user_subscription.subscription_plan.name
+                    'plan_name': user_subscription.subscription_plan.name if user_subscription.subscription_plan else 'Pro Plan'
+                }
+            )
+
+        # 🔔 SUBSCRIPTION BECAME PAST DUE
+        elif (subscription['status'] == 'past_due' and 
+              previous_status != 'past_due'):
+            
+            NotificationService.send_notification(
+                user_id=user_subscription.user.id,
+                title="Payment Issue ⚠️",
+                message="Your payment failed. Please update your payment method to continue your subscription.",
+                notification_types=['push', 'in_app', 'email'],
+                data={
+                    'type': 'subscription_past_due',
+                    'action_required': 'update_payment_method'
                 }
             )
         
-        logger.info(f"Updated subscription {subscription['id']}")
+        logger.info(f"Updated subscription {subscription['id']} - Status: {previous_status} → {subscription['status']}")
         
     except UserSubscription.DoesNotExist:
         logger.error(f"Subscription {subscription['id']} not found in database")
@@ -112,36 +160,66 @@ def handle_subscription_updated(subscription):
         logger.error(f"Error updating subscription: {str(e)}")
 
 def handle_subscription_deleted(subscription):
+    """
+    This webhook is called when subscription is ACTUALLY deleted/ended
+    This is when access should truly end
+    """
     try:
         user_subscription = UserSubscription.objects.get(
             stripe_subscription_id=subscription['id']
         )
+        
+        # Update status to canceled
         user_subscription.status = 'canceled'
-        user_subscription.canceled_at = timezone.now()
+        
+        # Set canceled_at if not already set
+        if not user_subscription.canceled_at:
+            user_subscription.canceled_at = timezone.now()
+        
         user_subscription.save()
-        logger.info(f"Deleted subscription {subscription['id']}")
+        
+        # 🔔 SUBSCRIPTION ACCESS HAS ACTUALLY ENDED
+        NotificationService.send_notification(
+            user_id=user_subscription.user.id,
+            title="Subscription Ended 📋",
+            message="Your subscription access has ended. You can resubscribe anytime to continue using Explorer Pro!",
+            notification_types=['push', 'in_app', 'email'],
+            data={
+                'type': 'subscription_ended',
+                'ended_at': timezone.now().isoformat(),
+                'resubscribe_available': True
+            }
+        )
+        
+        logger.info(f"Subscription {subscription['id']} completely deleted - access ended")
         
     except UserSubscription.DoesNotExist:
         logger.error(f"Subscription {subscription['id']} not found in database")
+    except Exception as e:
+        logger.error(f"Error handling subscription deletion: {str(e)}")
 
 def handle_payment_succeeded(invoice):
     try:
-        subscription_id = invoice.get('subscription')  # Use .get() instead of ['subscription']
+        subscription_id = invoice.get('subscription')
         if subscription_id:
             user_sub = UserSubscription.objects.get(stripe_subscription_id=subscription_id)
             user_sub.mark_payment_success()
 
-            NotificationService.send_notification(
-                user_id=user_sub.user.id,
-                title="Payment Successful! 💳",
-                message=f"Your {user_sub.subscription_plan.name} subscription has been renewed.",
-                notification_types=['push', 'in_app'],
-                data={
-                    'type': 'payment_success',
-                    'amount': str(user_sub.subscription_plan.price),
-                    'next_billing': user_sub.current_period_end.isoformat() if user_sub.current_period_end else None
-                }
-            )
+            # Don't send notification for first payment (trial end) as it's handled in subscription_updated
+            # Only send for renewal payments
+            if user_sub.last_payment_date:  # This means it's not the first payment
+                NotificationService.send_notification(
+                    user_id=user_sub.user.id,
+                    title="Payment Successful! 💳",
+                    message=f"Your {user_sub.subscription_plan.name if user_sub.subscription_plan else 'subscription'} has been renewed.",
+                    notification_types=['push', 'in_app'],
+                    data={
+                        'type': 'payment_success',
+                        'amount': str(user_sub.subscription_plan.price) if user_sub.subscription_plan else 'N/A',
+                        'next_billing': user_sub.current_period_end.isoformat() if user_sub.current_period_end else None
+                    }
+                )
+            
             logger.info(f"Payment succeeded for subscription {subscription_id}")
         else:
             logger.info("Invoice payment succeeded but no subscription ID found")
@@ -150,13 +228,12 @@ def handle_payment_succeeded(invoice):
     except Exception as e:
         logger.error(f"Error handling payment success: {str(e)}")
 
-
-
 def handle_payment_failed(invoice):
     try:
-        subscription_id = invoice.get('subscription')  # Use .get() instead of ['subscription']
+        subscription_id = invoice.get('subscription')
         if subscription_id:
             user_sub = UserSubscription.objects.get(stripe_subscription_id=subscription_id)
+            
             NotificationService.send_notification(
                 user_id=user_sub.user.id,
                 title="Payment Failed ❌",
@@ -164,7 +241,8 @@ def handle_payment_failed(invoice):
                 notification_types=['push', 'in_app', 'email'],
                 data={
                     'type': 'payment_failed',
-                    'action_required': 'update_payment_method'
+                    'action_required': 'update_payment_method',
+                    'retry_date': user_sub.current_period_end.isoformat() if user_sub.current_period_end else None
                 }
             )
             logger.info(f"Payment failed for subscription {subscription_id}")

@@ -56,14 +56,25 @@ class UserGoal(models.Model):
         if today > self.week_end:
             return 0
         return (self.week_end - today).days + 1
-    
+        
     @classmethod
     def get_or_create_weekly_goal(cls, user):
-        """Get or create this week's goal based on user's primary goal type"""
-        from .utils import get_user_primary_goal_type  # Import here to avoid circular imports
+        """Get or create this week's goal based on user's goal cycle"""
+        from .utils import get_user_primary_goal_type
         
         today = timezone.now().date()
-        week_start = today - timedelta(days=today.weekday())
+        
+        # Try to get user's onboarding date or use account creation date
+        try:
+            from apps.onboarding.models import UserGoalPreference
+            onboarding_date = user.date_joined.date()
+            # Calculate week start based on user's cycle, not Monday
+            days_since_start = (today - onboarding_date).days
+            week_number = days_since_start // 7
+            week_start = onboarding_date + timedelta(days=week_number * 7)
+        except:
+            # Fallback to Monday-based if calculation fails
+            week_start = today - timedelta(days=today.weekday())
         
         # Check if goal already exists for this week
         existing_goal = cls.objects.filter(user=user, week_start=week_start).first()
@@ -71,10 +82,8 @@ class UserGoal(models.Model):
         if existing_goal:
             return existing_goal, False
         
-        # Determine user's primary goal type
+        # Create new goal
         primary_goal_type = get_user_primary_goal_type(user)
-        
-        # Set target based on goal type
         target_count = 25 if primary_goal_type == 'scripture' else 10
         
         goal = cls.objects.create(
@@ -88,22 +97,30 @@ class UserGoal(models.Model):
     
     @classmethod
     def update_goal_for_preference_change(cls, user):
-        """Update current week's goal when user changes their faith preferences"""
+        """Update current week's goal when user changes their preferences"""
         from .utils import get_user_primary_goal_type
         
-        today = timezone.now().date() 
-        week_start = today - timedelta(days=today.weekday())
+        today = timezone.now().date()
+        
+        # Calculate week start (use same logic as get_or_create_weekly_goal)
+        try:
+            onboarding_date = user.date_joined.date()
+            days_since_start = (today - onboarding_date).days
+            week_number = days_since_start // 7
+            week_start = onboarding_date + timedelta(days=week_number * 7)
+        except:
+            week_start = today - timedelta(days=today.weekday())
         
         current_goal = cls.objects.filter(user=user, week_start=week_start).first()
         
         if current_goal:
             new_goal_type = get_user_primary_goal_type(user)
             
+            # ALWAYS update if goal type changed
             if current_goal.goal_type != new_goal_type:
                 current_goal.goal_type = new_goal_type
-                current_goal.current_count = 0
-                current_goal.completed = False
                 current_goal.target_count = 25 if new_goal_type == 'scripture' else 10
+                # DON'T reset progress - keep current_count and completed status
                 current_goal.save()
                 
                 return current_goal, True

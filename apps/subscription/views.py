@@ -38,24 +38,124 @@ mixin = SubscriptionMixin()
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def subscription_status(request):
-    """Get user's current subscription status"""
+    """Get user's current subscription status with frontend-friendly fields"""
     try:
         subscription = UserSubscription.objects.get(user=request.user)
         serializer = UserSubscriptionSerializer(subscription)
+        
+        # Add helpful status information for frontend
+        status_data = serializer.data
+        status_data.update({
+            # Core status fields
+            'is_active': subscription.is_active(),
+            'is_canceled': subscription.canceled_at is not None,
+            'is_trial_active': subscription.is_trial_active(),
+            
+            # Frontend display helpers
+            'subscription_state': get_subscription_state(subscription),
+            'display_message': get_display_message(subscription),
+            'action_required': get_action_required(subscription),
+            'show_cancel_button': should_show_cancel_button(subscription),
+            'show_reactivate_button': should_show_reactivate_button(subscription),
+            
+            # Time-based info
+            'days_until_trial_end': subscription.days_until_trial_end(),
+            'days_until_period_end': subscription.access_ends_in_days(),
+            'will_auto_renew': not subscription.canceled_at and subscription.is_active(),
+            
+            # Access info
+            'has_premium_access': subscription.is_active(),
+            'expires_at': subscription.trial_end if subscription.is_trial_active() else subscription.current_period_end,
+        })
+        
         return mixin.success_response(
-            data=serializer.data,
+            data=status_data,
             message="Subscription status retrieved successfully"
         )
     except UserSubscription.DoesNotExist:
         return mixin.success_response(
             data={
                 'has_subscription': False,
-                'show_subscription_page': True
+                'is_active': False,
+                'is_canceled': False,
+                'subscription_state': 'no_subscription',
+                'display_message': 'No active subscription',
+                'show_subscription_page': True,
+                'has_premium_access': False,
             },
             message="No active subscription found"
         )
     except Exception as e:
         return mixin.handle_exception(e)
+
+
+def get_subscription_state(subscription):
+    """Return a clear state for frontend logic"""
+    if not subscription.canceled_at:
+        # Not canceled
+        if subscription.status == 'trialing':
+            return 'trial_active'
+        elif subscription.status == 'active':
+            return 'active'
+        elif subscription.status == 'past_due':
+            return 'past_due'
+        else:
+            return subscription.status
+    else:
+        # Canceled
+        if subscription.is_active():
+            if subscription.is_trial_active():
+                return 'trial_canceled_but_active'
+            else:
+                return 'canceled_but_active'
+        else:
+            return 'canceled_ended'
+
+
+def get_display_message(subscription):
+    """Return user-friendly message for frontend"""
+    if subscription.canceled_at:
+        if subscription.is_active():
+            if subscription.is_trial_active():
+                return f"Trial canceled - Access until {subscription.trial_end.strftime('%B %d, %Y')}"
+            else:
+                return f"Canceled - Access until {subscription.current_period_end.strftime('%B %d, %Y')}"
+        else:
+            return "Subscription ended - Resubscribe anytime"
+    else:
+        if subscription.status == 'trialing':
+            return f"Free trial - {subscription.days_until_trial_end()} days remaining"
+        elif subscription.status == 'active':
+            return f"Active subscription - Renews {subscription.current_period_end.strftime('%B %d, %Y')}"
+        elif subscription.status == 'past_due':
+            return "Payment failed - Update payment method"
+        else:
+            return "Subscription status unknown"
+
+
+def get_action_required(subscription):
+    """Return what action user should take"""
+    if subscription.status == 'past_due':
+        return 'update_payment_method'
+    elif subscription.is_trial_active() and subscription.days_until_trial_end() <= 2:
+        return 'add_payment_method'
+    elif subscription.canceled_at and not subscription.is_active():
+        return 'resubscribe'
+    else:
+        return None
+
+
+def should_show_cancel_button(subscription):
+    """Should frontend show cancel button?"""
+    return (subscription.is_active() and 
+            not subscription.canceled_at and 
+            subscription.status not in ['past_due', 'incomplete'])
+
+
+def should_show_reactivate_button(subscription):
+    """Should frontend show reactivate button?"""
+    return subscription.canceled_at is not None
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -279,7 +379,9 @@ def create_subscription(request):
     except Exception as e:
         print(f"API Exception: {type(e).__name__}: {str(e)}")
         return mixin.handle_exception(e)
+    
 
+# 1. UPDATED CANCEL SUBSCRIPTION VIEW
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def cancel_subscription(request):
@@ -296,29 +398,52 @@ def cancel_subscription(request):
             user_subscription.stripe_subscription_id
         )
         
+        # Update cancellation timestamp
         user_subscription.canceled_at = timezone.now()
+        
+        # Update status from Stripe response
+        user_subscription.status = subscription.status
+        
+        # DON'T set is_active = False here!
+        # Let the subscription remain active until period ends
+        
         user_subscription.save()
 
+        # Dynamic message based on when access ends
+        if user_subscription.current_period_end:
+            access_message = f"Your subscription will remain active until {user_subscription.current_period_end.strftime('%B %d, %Y')}"
+        else:
+            access_message = "Your subscription has been cancelled"
+
         NotificationService.send_notification(
-        user_id=request.user.id,
-        title="Subscription Cancelled 🚫",
-        message=f"Your subscription will remain active until {user_subscription.current_period_end.strftime('%B %d, %Y')}",
-        notification_types=['push', 'in_app', 'email'],
-        data={
-            'type': 'subscription_cancelled',
-            'access_until': user_subscription.current_period_end.isoformat()
-        }
+            user_id=request.user.id,
+            title="Subscription Cancelled 🚫",
+            message=access_message,
+            notification_types=['push', 'in_app', 'email'],
+            data={
+                'type': 'subscription_cancelled',
+                'access_until': user_subscription.current_period_end.isoformat() if user_subscription.current_period_end else None,
+                'canceled_at': user_subscription.canceled_at.isoformat()
+            }
         )
         
         return mixin.success_response(
-            message="Subscription canceled successfully"
+            data={
+                'canceled_at': user_subscription.canceled_at.isoformat(),
+                'access_until': user_subscription.current_period_end.isoformat() if user_subscription.current_period_end else None,
+                'status': subscription.status,
+                'remains_active': user_subscription.is_active()
+            },
+            message=access_message
         )
+        
     except UserSubscription.DoesNotExist:
         return mixin.not_found_response(
             message="No subscription found"
         )
     except Exception as e:
         return mixin.handle_exception(e)
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
