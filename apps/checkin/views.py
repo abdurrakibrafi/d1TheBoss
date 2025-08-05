@@ -818,22 +818,29 @@ class PopulateBadgeTemplatesAPIView(BaseResponseMixin, APIView):
             'total_badges': BadgeTemplate.objects.count()
         }, status=status.HTTP_201_CREATED)
 
-
 class UserAppBadgesListAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        """Get user's earned badges"""
+        """Get user's earned badges with latest badge highlighted"""
         user = request.user
         user_badges = UserAppBadge.objects.filter(user=user).select_related('badge_template')
-        serializer = UserAppBadgeSerializer(user_badges, many=True)
         
-        return self.success_response({
+        # Get the latest badge (first in the ordered queryset)
+        latest_badge = user_badges.first() if user_badges.exists() else None
+        
+        serializer = UserAppBadgeSerializer(user_badges, many=True)
+        latest_badge_serializer = UserAppBadgeSerializer(latest_badge) if latest_badge else None
+        
+        response_data = {
+            'latest_badge': latest_badge_serializer.data if latest_badge_serializer else None,
             'badges': serializer.data,
             'total_earned': user_badges.count()
-        }, status=status.HTTP_200_OK)
-
-
+        }
+        
+        return self.success_response(response_data, status=status.HTTP_200_OK)
+    
+    
 class CheckAndAwardBadgesAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
     
