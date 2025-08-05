@@ -23,6 +23,7 @@ from apps.checkin.serializers import (
     )
 from apps.core.utils.mixins import BaseResponseMixin
 from apps.notification.services.notification_service import NotificationService
+from apps.goal.models import UserGoal, ConversationInteraction, ShareActivity, ChapterRead
 
 class StreakNotificationService:
     
@@ -194,26 +195,217 @@ class CalendarDataAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        """Get calendar data with check-in history"""
-        month = request.GET.get('month')
-        year = request.GET.get('year')
-        
-        user = request.user
-        checkins = DailyCheckin.objects.filter(user=user)
-        
-        if month and year:
-            checkins = checkins.filter(
-                checkin_date__month=month,
-                checkin_date__year=year
+        """Get comprehensive calendar data with check-ins, goals, and weekly check-ins"""
+        try:
+            month = request.GET.get('month')
+            year = request.GET.get('year')
+            
+            user = request.user
+            
+            # Safely get or create user streak to avoid errors
+            user_streak, created = UserStreak.objects.get_or_create(
+                user=user,
+                defaults={
+                    'current_streak': 0,
+                    'longest_streak': 0
+                }
             )
+            
+            # Base querysets - these will return empty QuerySets if no data exists
+            checkins = DailyCheckin.objects.filter(user=user)
+            goals = UserGoal.objects.filter(user=user)  # Don't filter by month/year here
+            weekly_checkins = UserWeeklyCheckin.objects.filter(user=user, is_completed=True)
+            
+            # Filter checkins and weekly_checkins by month/year if provided
+            if month and year:
+                try:
+                    month = int(month)
+                    year = int(year)
+                    checkins = checkins.filter(
+                        checkin_date__month=month,
+                        checkin_date__year=year
+                    )
+                    weekly_checkins = weekly_checkins.filter(
+                        completed_at__month=month,
+                        completed_at__year=year
+                    )
+                except (ValueError, TypeError):
+                    pass
+            
+            # Serialize daily check-ins
+            checkin_data = DailyCheckinSerializer(checkins, many=True).data
+            
+            # Process goal completions (filter by completion date, not week_start)
+            completed_goals = []
+            completed_goals_queryset = goals.filter(completed=True)
+            
+            for goal in completed_goals_queryset:
+                completion_date = None
+                
+                try:
+                    # Find completion date logic
+                    if goal.goal_type == 'scripture':
+                        last_chapter = ChapterRead.objects.filter(
+                            user=user,
+                            read_at__date__gte=goal.week_start,
+                            read_at__date__lte=goal.week_end
+                        ).order_by('-read_at').first()
+                        if last_chapter:
+                            completion_date = last_chapter.read_at.date()
+                    
+                    elif goal.goal_type == 'conversation':
+                        last_interaction = ConversationInteraction.objects.filter(
+                            user=user,
+                            created_at__date__gte=goal.week_start,
+                            created_at__date__lte=goal.week_end
+                        ).order_by('-created_at').first()
+                        if last_interaction:
+                            completion_date = last_interaction.created_at.date()
+                    
+                    elif goal.goal_type == 'share_faith':
+                        last_share = ShareActivity.objects.filter(
+                            user=user,
+                            shared_at__date__gte=goal.week_start,
+                            shared_at__date__lte=goal.week_end
+                        ).order_by('-shared_at').first()
+                        if last_share:
+                            completion_date = last_share.shared_at.date()
+                    
+                    if not completion_date:
+                        completion_date = goal.week_end
+                    
+                    # NOW filter by month/year based on completion_date
+                    if month and year:
+                        if completion_date.month != month or completion_date.year != year:
+                            continue  # Skip this goal if completion date doesn't match filter
+                    
+                    completed_goals.append({
+                        'id': goal.id,
+                        'goal_type': goal.goal_type,
+                        'goal_display': goal.get_goal_type_display(),
+                        'target_count': goal.target_count,
+                        'current_count': goal.current_count,
+                        'completion_date': completion_date,
+                        'week_start': goal.week_start,
+                        'week_end': goal.week_end,
+                        'progress_percentage': goal.progress_percentage()
+                    })
+                
+                except Exception as e:
+                    print(f"Error processing goal {goal.id}: {str(e)}")
+                    continue
+            
+            # Process weekly check-in completions
+            weekly_checkin_data = []
+            for weekly_checkin in weekly_checkins:
+                try:
+                    completion_date = weekly_checkin.completed_at.date() if weekly_checkin.completed_at else timezone.now().date()
+                    
+                    weekly_checkin_data.append({
+                        'id': weekly_checkin.id,
+                        'week_number': weekly_checkin.week_number,
+                        'completed_at': weekly_checkin.completed_at,
+                        'completion_date': completion_date,
+                        'total_responses': UserWeeklyCheckinResponse.objects.filter(
+                            weekly_checkin=weekly_checkin
+                        ).count()
+                    })
+                except Exception as e:
+                    print(f"Error processing weekly checkin {weekly_checkin.id}: {str(e)}")
+                    continue
+            
+            # Create flat calendar events list
+            calendar_events = []
+            
+            # Add daily check-ins
+            for checkin in checkin_data:
+                try:
+                    calendar_events.append({
+                        'date': checkin['checkin_date'],
+                        'type': 'daily_checkin',
+                        'streak_day': checkin.get('streak_day', 0),
+                        'checkin_id': checkin.get('id'),
+                        'created_at': checkin.get('created_at')
+                    })
+                except Exception as e:
+                    print(f"Error processing checkin: {str(e)}")
+                    continue
+            
+            # Add goal completions
+            for goal in completed_goals:
+                try:
+                    calendar_events.append({
+                        'date': goal['completion_date'].strftime('%Y-%m-%d'),
+                        'type': 'goal_completion',
+                        'goal_id': goal['id'],
+                        'goal_type': goal['goal_type'],
+                        'goal_display': goal['goal_display'],
+                        'target_count': goal['target_count'],
+                        'current_count': goal['current_count'],
+                        'progress_percentage': goal['progress_percentage'],
+                        'week_start': goal['week_start'],
+                        'week_end': goal['week_end']
+                    })
+                except Exception as e:
+                    print(f"Error processing goal completion: {str(e)}")
+                    continue
+            
+            # Add weekly check-in completions
+            for weekly_checkin in weekly_checkin_data:
+                try:
+                    calendar_events.append({
+                        'date': weekly_checkin['completion_date'].strftime('%Y-%m-%d'),
+                        'type': 'weekly_checkin_completion',
+                        'weekly_checkin_id': weekly_checkin['id'],
+                        'week_number': weekly_checkin['week_number'],
+                        'completed_at': weekly_checkin['completed_at'],
+                        'total_responses': weekly_checkin['total_responses']
+                    })
+                except Exception as e:
+                    print(f"Error processing weekly checkin completion: {str(e)}")
+                    continue
+            
+            # Sort by date (most recent first)
+            calendar_events.sort(key=lambda x: x['date'], reverse=True)
+            
+            # Summary stats
+            summary_stats = {
+                'total_daily_checkins': len(checkin_data),
+                'total_goals_completed': len(completed_goals),
+                'total_weekly_checkins_completed': len(weekly_checkin_data),
+                'current_streak': user_streak.current_streak,
+                'longest_streak': user_streak.longest_streak,
+                'filter_applied': {
+                    'month': month,
+                    'year': year,
+                    'has_filter': bool(month and year)
+                }
+            }
+            
+            # Breakdown by type
+            breakdown = {
+                'daily_checkins': checkin_data,
+                'completed_goals': completed_goals,
+                'weekly_checkins_completed': weekly_checkin_data
+            }
+            
+            # Message
+            if len(calendar_events) == 0:
+                message = "No activities found. Start your journey by checking in daily to build your streak!"
+            else:
+                message = f'Calendar data retrieved successfully. Found {len(calendar_events)} activities.'
+            
+            return self.success_response({
+                'calendar_events': calendar_events,
+                'breakdown': breakdown,
+                'summary': summary_stats,
+                'message': message,
+                'has_data': len(calendar_events) > 0
+            })
+            
+        except Exception as exc:
+            return self.handle_exception(exc)
         
-        serializer = DailyCheckinSerializer(checkins, many=True)
-        
-        return self.success_response({
-            'checkins': serializer.data,
-            'current_streak': user.streak.current_streak if hasattr(user, 'streak') else 0
-        })
-    
 
 class ProfileDashboardAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
@@ -532,3 +724,188 @@ class WeeklyCheckinHistoryAPIView(APIView):
                     "status_code": 500,
                     "data": {}
                 })
+            
+
+
+
+
+
+
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from django.utils import timezone
+from datetime import timedelta
+from .models import BadgeTemplate, UserAppBadge, UserWeeklyCheckin
+from .serializers import BadgeTemplateSerializer, UserAppBadgeSerializer
+
+class PopulateBadgeTemplatesAPIView(BaseResponseMixin, APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """Populate badge templates with predefined data"""
+        
+        badge_data = [
+            {
+                'badge_type': 'default',
+                'title': 'Welcome to the Glow-Up',
+                'description': 'You just took the realest step: showing up. This little candle\'s your holy hype man, here to remind you that even small steps matter. You\'re not just checking in, you\'re planting seeds, watering roots, and building a flame that\'s gonna burn brighter than your screen on max brightness at midnight.',
+                'order': 1,
+                'days_required': 0
+            },
+            {
+                'badge_type': 'first_week_checked',
+                'title': 'The Seed of Faith',
+                'description': 'Your faith may start small, but its potential is immeasurable. You\'ve taken the first step-watch as God works through your commitment to grow it into something extraordinary.',
+                'order': 2,
+                'days_required': None
+            },
+            {
+                'badge_type': 'first_week',
+                'title': 'Rooted in Grace',
+                'description': 'Your roots are strengthening, sinking deeper, nourished by His grace and your growing connection to His Word. Keep going!',
+                'order': 3,
+                'days_required': 7
+            },
+            {
+                'badge_type': 'two_week',
+                'title': 'The Sprout',
+                'description': 'Growth is visible now-your confidence is breaking ground and your consistency is bringing new life to your faith.',
+                'order': 4,
+                'days_required': 14
+            },
+            {
+                'badge_type': 'one_month',
+                'title': 'Reaching Towards the Light',
+                'description': 'As a tree stretches toward the sun, you are reaching for God\'s truth. Your faith has been tested and refined, growing stronger with each step of your journey.',
+                'order': 5,
+                'days_required': 30
+            },
+            {
+                'badge_type': 'three_months',
+                'title': 'Branches of Influence',
+                'description': 'Your journey is inspiring others, offering a haven of confidence, clarity, and a source of hope as they witness your faith flourish. Every check-in reflects your steady progress.',
+                'order': 6,
+                'days_required': 90
+            },
+            {
+                'badge_type': 'six_months',
+                'title': 'Flourishing Faith',
+                'description': 'Your journey has brought you to a place of flourishing, where God\'s purpose shines through you. With His Spirit as your guide, your faith continues to inspire and bless others. You have to see where your journey leads you next!',
+                'order': 7,
+                'days_required': 180
+            },
+            {
+                'badge_type': 'one_year',
+                'title': 'A Life of Overflowing Abundance',
+                'description': 'A word fitly spoken is like apples of gold in settings of silver\' (Proverbs 25:11). Your journey has brought you to a place of wisdom and grace, where your words reflect God\'s truth and love. With confidence rooted in His guidance, you are equipped to share your faith in ways that inspire and uplift others. You are a beacon of faith shining bright with His purpose.',
+                'order': 8,
+                'days_required': 365
+            }
+        ]
+        
+        created_count = 0
+        for data in badge_data:
+            badge_template, created = BadgeTemplate.objects.get_or_create(
+                badge_type=data['badge_type'],
+                defaults=data
+            )
+            if created:
+                created_count += 1
+        
+        return self.success_response({
+            'message': f'{created_count} badge templates created successfully',
+            'total_badges': BadgeTemplate.objects.count()
+        }, status=status.HTTP_201_CREATED)
+
+
+class UserAppBadgesListAPIView(BaseResponseMixin, APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get user's earned badges"""
+        user = request.user
+        user_badges = UserAppBadge.objects.filter(user=user).select_related('badge_template')
+        serializer = UserAppBadgeSerializer(user_badges, many=True)
+        
+        return self.success_response({
+            'badges': serializer.data,
+            'total_earned': user_badges.count()
+        }, status=status.HTTP_200_OK)
+
+
+class CheckAndAwardBadgesAPIView(BaseResponseMixin, APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """Check and award new badges to user"""
+        user = request.user
+        newly_awarded = []
+        
+        try:
+            # Award default badge if not already awarded
+            default_template = BadgeTemplate.objects.get(badge_type='default')
+            default_badge, created = UserAppBadge.objects.get_or_create(
+                user=user,
+                badge_template=default_template
+            )
+            if created:
+                newly_awarded.append(default_badge)
+        except BadgeTemplate.DoesNotExist:
+            pass
+        
+        # Check for first weekly checkin badge
+        first_checkin_completed = UserWeeklyCheckin.objects.filter(
+            user=user, 
+            is_completed=True
+        ).exists()
+        
+        if first_checkin_completed:
+            try:
+                first_checkin_template = BadgeTemplate.objects.get(badge_type='first_week_checked')
+                first_checkin_badge, created = UserAppBadge.objects.get_or_create(
+                    user=user,
+                    badge_template=first_checkin_template
+                )
+                if created:
+                    newly_awarded.append(first_checkin_badge)
+            except BadgeTemplate.DoesNotExist:
+                pass
+        
+        # Check time-based badges
+        user_days_in_app = (timezone.now().date() - user.date_joined.date()).days
+        
+        time_based_templates = BadgeTemplate.objects.filter(
+            days_required__isnull=False,
+            days_required__lte=user_days_in_app
+        ).exclude(badge_type='default')
+        
+        for template in time_based_templates:
+            badge, created = UserAppBadge.objects.get_or_create(
+                user=user,
+                badge_template=template
+            )
+            if created:
+                newly_awarded.append(badge)
+        
+        # Serialize newly awarded badges
+        serializer = UserAppBadgeSerializer(newly_awarded, many=True)
+        
+        return self.success_response({
+            'newly_awarded': serializer.data,
+            'count': len(newly_awarded),
+            'message': f'{len(newly_awarded)} new badges awarded!' if newly_awarded else 'No new badges to award'
+        }, status=status.HTTP_200_OK)
+
+
+class AllBadgeTemplatesAPIView(BaseResponseMixin, APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get all available badge templates"""
+        templates = BadgeTemplate.objects.all()
+        serializer = BadgeTemplateSerializer(templates, many=True)
+        
+        return self.success_response({
+            'badge_templates': serializer.data
+        }, status=status.HTTP_200_OK)

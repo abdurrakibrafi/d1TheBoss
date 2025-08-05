@@ -19,15 +19,17 @@ urlpatterns = [
     path('weekly/history/', WeeklyCheckinHistoryAPIView.as_view(), name='weekly-history'),
     path('weekly/history/<int:week_number>/', WeeklyCheckinHistoryAPIView.as_view(), name='weekly-history-detail'),
 
-
-       # Test Data APIs
+    # Test Data APIs
     path('test/create/', CreateTestDataAPIView.as_view(), name='create-test-data'),
     path('test/reset/', ResetTestDataAPIView.as_view(), name='reset-test-data'),
     path('test/scenarios/', QuickTestScenariosAPIView.as_view(), name='test-scenarios'),
-    path('test/status/', DataStatusAPIView.as_view(), name='data-status'),
-    
-
+    path('test/status/', DataStatusAPIView.as_view(), name='data-status'),    
     
     # Notifications
     # path('notifications/settings/', NotificationSettingsAPIView.as_view(), name='notification-settings'),
+
+    path('badges/populate/', PopulateBadgeTemplatesAPIView.as_view(), name='populate-badges'),
+    path('badges/my-badges/', UserAppBadgesListAPIView.as_view(), name='user-badges'),
+    path('badges/check-awards/', CheckAndAwardBadgesAPIView.as_view(), name='check-award-badges'),
+    path('badges/templates/', AllBadgeTemplatesAPIView.as_view(), name='badge-templates'),
 ]

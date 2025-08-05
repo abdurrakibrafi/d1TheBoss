@@ -58,6 +58,7 @@ from .serializers import (
 )
 from django.db import transaction
 from apps.goal.models import UserGoal
+from apps.goal.serializers import UserGoalSerializer
 
 
 
@@ -468,14 +469,36 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
                 'options': options
             })
 
+        goal_preference_obj = UserGoalPreference.objects.filter(user=user).first()
+        user_goal_obj = UserGoal.objects.filter(user=user).first()
+        print(user_goal_obj)
+
+        goal, created = UserGoal.get_or_create_weekly_goal(request.user)
+        print("Goal object:", goal)
+        print("Goal type:", goal.goal_type)
+        print("Was created:", created)
+
+        goal_preference_obj = UserGoalPreference.objects.filter(user=user).first()
+        user_goal_obj = UserGoal.objects.filter(user=user).first()
+        print(user_goal_obj)
+        print(goal_preference_obj)
+
         data = {
             "goal_preference": (
                 UserGoalPreferenceSerializer(
                     UserGoalPreference.objects.filter(user=user).first(),
                     context={'request': request}
                 ).data
+                
                 if UserGoalPreference.objects.filter(user=user).exists()
-                else None
+                else (
+                    UserGoalSerializer(
+                        UserGoal.objects.filter(user=user).order_by('-week_start').first(),
+                        context={'request': request}
+                    ).data
+                    if UserGoal.objects.filter(user=user).exists()
+                    else None
+                )
             ),
             "journey_reason": (
                 JourneyReasonSerializer(

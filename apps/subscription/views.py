@@ -340,8 +340,8 @@ def create_subscription(request):
             user_subscription.trial_end = timezone.datetime.fromtimestamp(
                 subscription.trial_end, tz=ZoneInfo("UTC")
             )
-            
-            
+
+        user_subscription.canceled_at = None  # Reset cancellation timestamp
         user_subscription.save()
 
         NotificationService.send_notification(
@@ -696,4 +696,68 @@ def switch_subscription(request):
         return mixin.handle_exception(Exception(f"Missing subscription field: {str(e)}"))
     except Exception as e:
         print(f"Switch API Exception: {type(e).__name__}: {str(e)}")
+        return mixin.handle_exception(e)
+    
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reactivate_subscription(request):
+    """Reactivate a canceled subscription"""
+    try:
+        user_subscription = UserSubscription.objects.get(user=request.user)
+        
+        # Check if subscription can be reactivated
+        if not user_subscription.stripe_subscription_id:
+            return mixin.not_found_response(
+                message="No subscription found"
+            )
+            
+        if not user_subscription.canceled_at:
+            return mixin.bad_request_response(
+                message="Subscription is not canceled"
+            )
+            
+        if not user_subscription.is_active():
+            return mixin.bad_request_response(
+                message="Subscription has already ended. Please create a new subscription."
+            )
+        
+        # Reactivate in Stripe
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+        subscription = stripe.Subscription.modify(
+            user_subscription.stripe_subscription_id,
+            cancel_at_period_end=False  # This reactivates it
+        )
+        
+        # Clear cancellation in our database
+        user_subscription.canceled_at = None
+        user_subscription.status = subscription.status
+        user_subscription.save()
+        
+        NotificationService.send_notification(
+            user_id=request.user.id,
+            title="Subscription Reactivated! ✅",
+            message=f"Your {user_subscription.subscription_plan.name} subscription will continue after {user_subscription.current_period_end.strftime('%B %d, %Y')}",
+            notification_types=['push', 'in_app'],
+            data={
+                'type': 'subscription_reactivated',
+                'plan_name': user_subscription.subscription_plan.name if user_subscription.subscription_plan else 'Pro Plan'
+            }
+        )
+        
+        return mixin.success_response(
+            data={
+                'is_canceled': False,
+                'is_active': True,
+                'will_auto_renew': True,
+                'next_billing_date': user_subscription.current_period_end.isoformat() if user_subscription.current_period_end else None
+            },
+            message="Subscription reactivated successfully"
+        )
+        
+    except UserSubscription.DoesNotExist:
+        return mixin.not_found_response(
+            message="No subscription found"
+        )
+    except Exception as e:
         return mixin.handle_exception(e)

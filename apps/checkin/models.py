@@ -8,6 +8,7 @@ class UserStreak(models.Model):
     current_streak = models.IntegerField(default=0)
     longest_streak = models.IntegerField(default=0)
     last_checkin_date = models.DateField(null=True, blank=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -89,3 +90,51 @@ class UserBadge(models.Model):
             current += 4
         return milestones
     
+
+# 1 week (first badge)
+
+# 2 weeks (second badge)
+
+# 1 month (third badge)
+
+# 3 months (fourth badge)
+
+# 6 months (fifth badge)
+
+# 1 year (final badge, remains fixed afterward)
+class BadgeTemplate(models.Model):
+    BADGE_TYPE = [
+        ('default', 'Default'),
+        ('first_week_checked', 'First Week Checked'),
+        ('first_week', 'First Week'),
+        ('two_week', 'Two Week'),
+        ('one_month', 'One Month'),
+        ('three_months', 'Three Months'),
+        ('six_months', 'Six Months'),
+        ('one_year', 'One Year')
+    ]
+    
+    badge_type = models.CharField(max_length=100, choices=BADGE_TYPE, unique=True)
+    title = models.CharField(max_length=200, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    image = models.ImageField(upload_to='checkin/badges/', blank=True, null=True)
+    order = models.IntegerField(default=0)
+    days_required = models.IntegerField(null=True, blank=True)  # For time-based badges
+    
+    class Meta:
+        ordering = ['order']
+    
+    def __str__(self):
+        return self.title
+
+class UserAppBadge(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='app_badges', blank=True, null=True)
+    badge_template = models.ForeignKey(BadgeTemplate, on_delete=models.CASCADE, blank=True, null=True)
+    earned_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ('user', 'badge_template')
+        ordering = ['-earned_at']
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.badge_template.title}"

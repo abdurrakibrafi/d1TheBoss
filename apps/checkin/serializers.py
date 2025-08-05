@@ -38,3 +38,18 @@ class WeeklyCheckinResponseSerializer(serializers.ModelSerializer):
 #     class Meta:
 #         model = NotificationSetting
 #         fields = '__all__'
+
+from rest_framework import serializers
+from .models import BadgeTemplate, UserBadge
+
+class BadgeTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BadgeTemplate
+        fields = '__all__'
+
+class UserAppBadgeSerializer(serializers.ModelSerializer):
+    badge_template = BadgeTemplateSerializer(read_only=True)
+    
+    class Meta:
+        model = UserAppBadge
+        fields = ['id', 'badge_template', 'earned_at']

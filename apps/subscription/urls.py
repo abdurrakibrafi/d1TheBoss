@@ -14,6 +14,7 @@ urlpatterns = [
     path('plans/', views.list_subscription_plans, name='subscription-plans'),
     path('create/', views.create_subscription, name='create-subscription'),
     path('cancel/', views.cancel_subscription, name='cancel-subscription'),
+    path('reactivate/', views.reactivate_subscription, name='reactivate-subscription'),
     path('switch/', views.switch_subscription, name='switch-subscription'),
 
     # Payment methods

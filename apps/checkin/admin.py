@@ -57,3 +57,37 @@ class UserBadgeAdmin(admin.ModelAdmin):
     list_display = ('user', 'weeks_completed', 'badge_name', 'earned_date')
     search_fields = ('user__email',)
     readonly_fields = ('earned_date',)
+
+from .models import BadgeTemplate, UserAppBadge
+
+from django.contrib import admin
+from django.utils.html import format_html
+from .models import BadgeTemplate, UserAppBadge
+
+@admin.register(BadgeTemplate)
+class BadgeTemplateAdmin(admin.ModelAdmin):
+    list_display = ('title', 'badge_type', 'order', 'days_required', 'image_tag')
+    list_filter = ('badge_type',)
+    search_fields = ('title', 'description')
+    ordering = ('order',)
+    list_editable = ('order', 'days_required')
+    readonly_fields = ('image_preview',)
+
+    def image_tag(self, obj):
+        if obj.image:
+            return format_html('<img src="{}" width="40" height="40" style="border-radius:5px;"/>', obj.image.url)
+        return "No Image"
+    image_tag.short_description = "Preview"
+
+    def image_preview(self, obj):
+        if obj.image:
+            return format_html('<img src="{}" width="120" height="120" style="border-radius:10px;"/>', obj.image.url)
+        return "No Image"
+    image_preview.short_description = "Image Preview"
+
+@admin.register(UserAppBadge)
+class UserAppBadgeAdmin(admin.ModelAdmin):
+    list_display = ('user', 'badge_template', 'earned_at')
+    list_filter = ('badge_template', 'earned_at')
+    search_fields = ('user__email', 'badge_template__title')
+    ordering = ('-earned_at',)
