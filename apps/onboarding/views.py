@@ -196,6 +196,16 @@ class FaithGoalView(BaseResponseMixin, generics.GenericAPIView):
             )
             if serializer.is_valid():
                 serializer.save()
+                
+                # ADD THIS: Update user's goal based on new faith goal selections
+                try:
+                    from apps.goal.models import UserGoal  # Import UserGoal
+                    goal_updated = UserGoal.update_goal_for_preference_change(request.user)
+                    if goal_updated[1]:  # If goal was actually updated
+                        print(f"Goal updated for user {request.user.id} to {goal_updated[0].goal_type}")
+                except Exception as e:
+                    print(f"Error updating goal after faith goal save: {str(e)}")
+                
                 return self.created_response(
                     data="Goals saved successfully",
                     message="Faith goals saved successfully",

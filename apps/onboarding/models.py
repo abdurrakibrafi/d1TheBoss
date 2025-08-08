@@ -91,10 +91,17 @@ class FaithGoalQuestion(models.Model):
 
 
 class FaithGoalOption(models.Model):
+    GOAL_TYPES = [
+        ('conversation', 'Confidence Goal'),
+        ('scripture', 'Scripture Knowledge'),
+        ('share_faith', 'Inspiration Goal'),
+    ]
     faith_goal_question = models.ForeignKey(
         FaithGoalQuestion, on_delete=models.CASCADE, blank=True, null=True
     )
     option = models.CharField(max_length=250, blank=True, null=True)
+    goal_type = models.CharField(max_length=20, choices=GOAL_TYPES, default='scripture')
+
     is_active = models.BooleanField(default=True)
 
     is_selected = models.BooleanField(default=False)

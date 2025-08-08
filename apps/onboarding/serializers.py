@@ -140,9 +140,18 @@ class BulkFaithGoalSerializer(serializers.Serializer):
             goal_data["user"] = user
             goals.append(FaithGoal(**goal_data))
 
-        return FaithGoal.objects.bulk_create(goals)
-
-
+        created_goals = FaithGoal.objects.bulk_create(goals)
+        
+        # ADD THIS: Update user's goal based on new faith goal selections
+        try:
+            from apps.goal.models import UserGoal
+            goal_updated = UserGoal.update_goal_for_preference_change(user)
+            if goal_updated[1]:  # If goal was actually updated
+                print(f"Goal updated for user {user.id} to {goal_updated[0].goal_type}")
+        except Exception as e:
+            print(f"Error updating goal after faith goal save: {str(e)}")
+            
+        return created_goals
 class TonePreferenceSerializer(serializers.ModelSerializer):
     tone_preference_detail = TonePreferenceOptionSerializer(
         source="tone_preference_option", read_only=True
