@@ -56,9 +56,10 @@ class FaithGoalQuestionAdmin(admin.ModelAdmin):
 
 @admin.register(FaithGoalOption)
 class FaithGoalOptionAdmin(admin.ModelAdmin):
-    list_display = ["faith_goal_question", "option", "is_active"]
+    list_display = ["faith_goal_question", "option", 'goal_type', "is_active"]
     search_fields = ["option", "faith_goal_question__question"]
     list_filter = ["is_active", "faith_goal_question"]
+    list_editable = ('goal_type',)
 
 
 @admin.register(FaithGoal)

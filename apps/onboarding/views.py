@@ -590,8 +590,7 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
                 )
                 if serializer.is_valid():
                     serializer.save()
-                    # Return the updated faith goals in the same format as GET
-                    faith_goals_data = self._get_faith_goals_data(user)  # You'll need to extract this logic
+                    faith_goals_data = self._get_faith_goals_data(user)
                     updated["faith_goal"] = faith_goals_data
                 else:
                     errors["faith_goal"] = serializer.errors
@@ -606,16 +605,42 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
         update_model("bible_familiarity", BibleFamiliarity, BibleFamiliaritySerializer)
         update_model("bible_version", BibleVersion, BibleVersionSerializer)
 
-                
-            # MOVE THIS OUTSIDE THE IF STATEMENT - trigger for ANY update that affects goals
+        # FIXED: Trigger goal update for ANY update that affects goals
         if updated and not errors:
-            # Check if goal-affecting fields were updated
             goal_affecting_fields = ['goal_preference', 'faith_goal']
             if any(field in updated for field in goal_affecting_fields):
-                goal_updated = UserGoal.update_goal_for_preference_change(user)
-                if goal_updated[1]:  # If goal was actually updated
-                    updated['goal_updated'] = True
-                    
+                # IMPORTANT: If faith_goal was updated but no goal_preference exists, 
+                # temporarily clear/recalculate the goal preference
+                if 'faith_goal' in updated and 'goal_preference' not in updated:
+                    # Force recalculation by temporarily removing preference if it exists
+                    existing_preference = UserGoalPreference.objects.filter(user=user).first()
+                    if existing_preference:
+                        # Store the old preference type
+                        old_preference_type = existing_preference.goal_type
+                        # Delete it temporarily so get_user_primary_goal_type calculates from faith goals
+                        existing_preference.delete()
+                        
+                        # Now update the goal (this will calculate from faith goals)
+                        goal_updated = UserGoal.update_goal_for_preference_change(user)
+                        
+                        # Recreate the preference with the new calculated type
+                        from apps.goal.utils import get_user_primary_goal_type
+                        new_goal_type = get_user_primary_goal_type(user)
+                        UserGoalPreference.objects.create(user=user, goal_type=new_goal_type)
+                        
+                        if goal_updated[1]:  # If goal was actually updated
+                            updated['goal_updated'] = True
+                    else:
+                        # No existing preference, just update goal
+                        goal_updated = UserGoal.update_goal_for_preference_change(user)
+                        if goal_updated[1]:
+                            updated['goal_updated'] = True
+                else:
+                    # Normal goal preference update
+                    goal_updated = UserGoal.update_goal_for_preference_change(user)
+                    if goal_updated[1]:
+                        updated['goal_updated'] = True
+                        
         if errors:
             return self.error_response(
                 message="Some fields failed to update.",
@@ -626,7 +651,7 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
         return self.success_response(
             data=updated, message="User onboarding data updated successfully."
         )
-
+    
     def _get_faith_goals_data(self, user):
         """Extract the faith goals logic from GET method"""
         faith_goals_data = []

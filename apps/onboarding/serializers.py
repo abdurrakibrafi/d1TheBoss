@@ -131,6 +131,10 @@ class BulkFaithGoalSerializer(serializers.Serializer):
         goals_data = validated_data["goals"]
         user = self.context["request"].user
 
+        print(f"=== BULK FAITH GOAL SERIALIZER DEBUG ===")
+        print(f"User: {user.id}")
+        print(f"Goals data: {goals_data}")
+
         # Delete existing goals for this user
         FaithGoal.objects.filter(user=user).delete()
 
@@ -141,17 +145,28 @@ class BulkFaithGoalSerializer(serializers.Serializer):
             goals.append(FaithGoal(**goal_data))
 
         created_goals = FaithGoal.objects.bulk_create(goals)
+        print(f"Created {len(created_goals)} goals")
+        
+        # Debug: Check what was actually saved
+        saved_goals = FaithGoal.objects.filter(user=user).select_related('faith_goal_option')
+        for goal in saved_goals:
+            print(f"Saved goal - Option ID: {goal.faith_goal_option.id}, Option: {goal.faith_goal_option.option}, Goal Type: {goal.faith_goal_option.goal_type}")
         
         # ADD THIS: Update user's goal based on new faith goal selections
         try:
             from apps.goal.models import UserGoal
+            print("=== CALLING GOAL UPDATE ===")
             goal_updated = UserGoal.update_goal_for_preference_change(user)
+            print(f"Goal update result: {goal_updated}")
             if goal_updated[1]:  # If goal was actually updated
                 print(f"Goal updated for user {user.id} to {goal_updated[0].goal_type}")
+            else:
+                print(f"Goal NOT updated - current goal: {goal_updated[0].goal_type if goal_updated[0] else 'None'}")
         except Exception as e:
             print(f"Error updating goal after faith goal save: {str(e)}")
             
         return created_goals
+    
 class TonePreferenceSerializer(serializers.ModelSerializer):
     tone_preference_detail = TonePreferenceOptionSerializer(
         source="tone_preference_option", read_only=True
