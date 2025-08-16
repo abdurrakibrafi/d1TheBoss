@@ -75,65 +75,144 @@ class AIChatCore:
                 "error": str(e),
             }
 
-    def _build_bible_system_prompt(self, user_context: Dict) -> str:
-        """Build Bible-focused system prompt based on user's spiritual context"""
+    def generate_preachly_response(
+        self,
+        objection: str,
+        tone: str = "Clear and Hopeful",
+        depth: str = "In-Depth Explanation",
+        user_context: Dict = None
+    ) -> Dict:
+        """Generate Preachly structured response"""
         
-        # Base Bible assistant prompt
-        base_prompt = """You are a knowledgeable and compassionate Bible study assistant. Your role is to help users understand Scripture, grow in their faith, and apply biblical wisdom to their lives.
+        start_time = time.time()
+        
+        try:
+            # Build Preachly system prompt
+            system_prompt = self._build_preachly_system_prompt(objection, tone, depth, user_context)
+            
+            # Adjust temperature based on tone
+            temperature = self._get_tone_temperature(tone)
+            
+            # Generate main response
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": objection}
+                ],
+                temperature=temperature,
+                max_tokens=1500,
+            )
+            
+            content = response.choices[0].message.content
+            
+            # Generate key points summary
+            summary = self._generate_key_points_summary(content, tone)
+            
+            return {
+                "content": content,
+                "summary": summary,
+                "tokens_used": response.usage.total_tokens,
+                "response_time": time.time() - start_time,
+                "tone": tone,
+                "depth": depth,
+                "success": True,
+            }
+            
+        except Exception as e:
+            return {
+                "content": self._get_biblical_error_message(),
+                "summary": [],
+                "success": False,
+                "error": str(e)
+            }
 
-Core Guidelines:
-- Always be respectful of different Christian denominations and interpretations
-- Provide accurate biblical information and context
-- Use appropriate biblical references to support your responses
-- Be encouraging and supportive in your tone
-- When discussing complex theological topics, present multiple perspectives when appropriate
-- Always point users toward Scripture and prayer
-- Be humble about limitations and encourage users to seek pastoral guidance for deep personal matters"""
+    def _get_tone_temperature(self, tone: str) -> float:
+        """Get AI temperature based on tone"""
+        tone_temps = {
+            "Scholarly and Rational": 0.3,
+            "Clear and Hopeful": 0.5,
+            "Practical and Everyday": 0.6,
+            "Dynamic and Powerful": 0.8,
+            "Passionate and Empowering": 0.8,
+            "Warm and Relatable": 0.7,
+            "Encouraging and Purposeful": 0.6,
+            "Uplifting and Optimistic": 0.7,
+        }
+        return tone_temps.get(tone, 0.7)
 
-        if not user_context:
-            return base_prompt
+    def _generate_key_points_summary(self, content: str, tone: str) -> List[str]:
+        """Generate 3-6 key points summary"""
+        try:
+            summary_prompt = f"""Provide a numbered summary of 3 to 6 key points from this response. Use simple language and match the {tone} tone style:
 
-        # Customize based on user's spiritual journey
-        journey_reason = user_context.get('journey_reason', '')
-        if journey_reason:
-            base_prompt += f"\n\nUser's Journey: This person is exploring faith because: {journey_reason}. Be especially sensitive to their spiritual journey and meet them where they are."
+            {content}"""
+            
+            response = self.client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": summary_prompt}],
+                temperature=0.3,
+                max_tokens=200,
+            )
+            
+            summary_text = response.choices[0].message.content
+            # Extract numbered points
+            points = []
+            for line in summary_text.split('\n'):
+                if line.strip() and (line.strip()[0].isdigit() or line.strip().startswith('-')):
+                    points.append(line.strip())
+            
+            return points[:6]
+            
+        except:
+            return ["Key insights provided in the response above"]
 
-        # Denomination awareness
-        denomination = user_context.get('denomination', '')
-        if denomination:
-            base_prompt += f"\n\nDenominational Background: The user identifies with {denomination}. Be respectful of this tradition while providing biblically grounded responses."
+    def _get_biblical_error_message(self) -> str:
+        """Get random biblical error message"""
+        errors = [
+            "Seems I'm having a 'parting of the Red Sea' moment—stuck in the middle! Give it another go.",
+            "Looks like I'm having a Jonah moment—briefly off course! Try again, and we'll get back on mission.",
+            "I've hit a Jericho wall, but don't worry—it's coming down! Give it another try.",
+            "Even Paul had shipwrecks—this is mine. Let's try again and stay the course.",
+            "I've run into a Goliath-sized glitch… but I've got my slingshot ready. Try again!",
+        ]
+        import random
+        return random.choice(errors)
+        
+    def _build_preachly_system_prompt(self, objection: str, tone: str, depth: str, user_context: Dict) -> str:
+        """Build Preachly structured system prompt"""
+        
+        base_prompt = """You are Preachly, an advanced assistant providing scripture-based, thoughtful rebuttals to common objections about Christianity. Your responses must be biblically rooted, engaging, and aligned with the selected tone.
 
-        # Faith goals
-        faith_goal = user_context.get('faith_goal', '')
-        if faith_goal:
-            base_prompt += f"\n\nFaith Goal: They want to {faith_goal}. Help them work toward this spiritual goal through Scripture."
+    Follow this structured response flow:
 
-        # Tone preference
-        tone_preference = user_context.get('tone_preference', {})
-        if tone_preference:
-            tone_name = tone_preference.get('name', '')
-            tone_description = tone_preference.get('description', '')
-            if tone_name and tone_description:
-                base_prompt += f"\n\nTone Preference: Use a {tone_name} tone - {tone_description}. Adjust your communication style accordingly."
+    1. Scriptural Rebuttal: Provide a scripture verse that directly addresses the objection
+    2. Anecdote/Metaphor: Craft a vivid, relatable anecdote or metaphor 
+    3. Explanation: Tailor explanation to the selected depth level
+    4. Tone Consistency: Maintain the selected tone throughout all sections
 
-        # Bible familiarity
-        bible_familiarity = user_context.get('bible_familiarity', {})
-        if bible_familiarity:
-            familiarity_level = bible_familiarity.get('label', '')
-            if familiarity_level:
-                base_prompt += f"\n\nBible Knowledge Level: {familiarity_level}. Adjust your explanations and references to match their current understanding."
+    Tone Guidelines:
+    - Clear and Hopeful: Simple, direct, and encouraging
+    - Dynamic and Powerful: Emotive, bold, with vivid imagery
+    - Practical and Everyday: Grounded, solution-oriented
+    - Encouraging and Purposeful: Focus on meaning and growth
+    - Uplifting and Optimistic: Highlight hope and joy
+    - Scholarly and Rational: Logic, reason, well-structured arguments
+    - Warm and Relatable: Conversational, empathetic, emotionally resonant
+    - Passionate and Empowering: Spiritual growth, perseverance, strength
 
-        # Bible version preference
-        bible_version = user_context.get('bible_version', {})
-        if bible_version:
-            version_title = bible_version.get('title', '')
-            if version_title:
-                base_prompt += f"\n\nPreferred Bible Version: When quoting Scripture, use {version_title} when possible."
+    Response Structure:
+    Objection: {objection}
+    Tone: {tone}
+    Depth: {depth}
 
-        # Final instructions
-        base_prompt += "\n\nRemember to be authentic, caring, and Christ-centered in all your responses. Your goal is to help this person grow closer to God through understanding His Word."
+    Scriptural Rebuttal: [Relevant scripture with tone-appropriate phrasing]
 
-        return base_prompt
+    Anecdote/Metaphor: [Relatable story or metaphor matching the tone]
+
+    Explanation: [Depth-appropriate theological explanation]"""
+
+        return base_prompt.format(objection=objection, tone=tone, depth=depth)
 
     def _get_contextual_temperature(self, user_context: Dict) -> float:
         """Adjust AI temperature based on user's spiritual context"""
@@ -303,6 +382,7 @@ Keep the summary concise but informative."""
                 "error": str(e),
                 "success": False,
             }
+            
 
     def suggest_follow_up_topics(self, conversation_context: Dict, user_context: Dict) -> List[str]:
         """Suggest follow-up topics based on conversation and user context"""

@@ -99,53 +99,52 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.send_error(f"Unexpected error: {str(e)}")
 
     async def handle_bible_chat_message(self, data):
-        """Process Bible chat message with AI response"""
+        """Process Bible chat with Preachly structure"""
         try:
             message = data.get("message", "").strip()
-            session_id = data.get("session_id")
-
+            message_type = data.get("message_type", "objection")  # objection, clarification, yes_no
+            tone = data.get("tone", "Clear and Hopeful")
+            depth = data.get("depth", "In-Depth Explanation")
+            
             if not message:
                 await self.send_error("Message cannot be empty")
                 return
 
-            # Initialize or get conversation
-            if not self.conversation or (
-                session_id and str(self.conversation.session.id) != session_id
-            ):
+            # Initialize conversation if needed
+            if not self.conversation:
                 self.conversation = await database_sync_to_async(ConversationManager)(
-                    user=self.user, session_id=session_id
+                    user=self.user
                 )
 
-            # Send typing indicator
             await self.send(json.dumps({"type": "typing", "is_typing": True}))
 
             # Add user message
-            user_message = await database_sync_to_async(self.conversation.add_message)(
+            await database_sync_to_async(self.conversation.add_message)(
                 content=message, is_user=True
             )
 
-            # Get conversation history and user context for AI
-            conversation_history = await database_sync_to_async(
-                self.conversation.format_for_ai
-            )()
-            
             user_context = await database_sync_to_async(
                 self.conversation.get_user_spiritual_context
             )()
 
-            # Generate AI response
+            # Handle different message types
+            if message_type == "yes_no":
+                if message.lower() in ["yes", "yes, explain more"]:
+                    await self.handle_clarification_request(data)
+                    return
+                elif message.lower() in ["no", "no, thanks"]:
+                    await self.handle_no_clarification(data)
+                    return
+
+            # Generate Preachly response
             ai_response_data = await asyncio.get_event_loop().run_in_executor(
-                None, self._generate_bible_response, conversation_history, user_context
+                None, self._generate_preachly_response, message, tone, depth, user_context
             )
 
-            # Convert decimals for JSON serialization
-            ai_response_data = self.convert_decimals(ai_response_data)
-
-            # Stop typing indicator
             await self.send(json.dumps({"type": "typing", "is_typing": False}))
 
             if ai_response_data["success"]:
-                # Add AI response to conversation
+                # Add AI response
                 ai_message = await database_sync_to_async(
                     self.conversation.add_message
                 )(
@@ -154,33 +153,116 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     ai_metadata=ai_response_data,
                 )
 
-                # Update session context if available
-                if ai_response_data.get("conversation_context"):
-                    await database_sync_to_async(
-                        self.conversation.update_session_context
-                    )(ai_response_data["conversation_context"])
-
-                # Send response to client
+                # Send structured response
                 response_data = {
-                    "type": "message",
+                    "type": "preachly_response",
                     "content": ai_response_data["content"],
+                    "summary": ai_response_data["summary"],
                     "session_id": str(self.conversation.session.id),
                     "message_id": ai_message.id,
+                    "tone": ai_response_data["tone"],
+                    "depth": ai_response_data["depth"],
                     "tokens_used": ai_response_data.get("tokens_used", 0),
-                    "response_time": ai_response_data.get("response_time", 0),
-                    "model_used": ai_response_data.get("model_used", ""),
-                    "bible_references": ai_response_data.get("bible_references", []),
+                    "show_clarification": True,  # Show "Need more clarity?" buttons
                     "timestamp": ai_message.created_at.isoformat(),
                 }
 
                 await self.send(json.dumps(response_data))
             else:
-                await self.send_error(
-                    f"AI Error: {ai_response_data.get('error', 'Unknown error')}"
-                )
+                await self.send_error(ai_response_data.get("error", "Unknown error"))
 
         except Exception as e:
-            await self.send_error(f"Message processing error: {str(e)}")
+            await self.send_error(f"Error: {str(e)}")
+
+    async def handle_clarification_request(self, data):
+        """Handle 'Yes' - provide clarification"""
+        try:
+            # Get last AI response for clarification
+            last_message = await database_sync_to_async(
+                lambda: self.conversation.session.messages.filter(is_user=False).last()
+            )()
+            
+            if not last_message:
+                await self.send_error("No previous response to clarify")
+                return
+                
+            # Generate clarification
+            clarification_data = await asyncio.get_event_loop().run_in_executor(
+                None, self._generate_clarification, last_message.content, data.get("tone", "Clear and Hopeful")
+            )
+            
+            if clarification_data["success"]:
+                # Add clarification message
+                clarification_message = await database_sync_to_async(
+                    self.conversation.add_message
+                )(
+                    content=clarification_data["content"],
+                    is_user=False,
+                    ai_metadata=clarification_data,
+                )
+                
+                # Send clarification response
+                await self.send(json.dumps({
+                    "type": "clarification_response",
+                    "content": clarification_data["content"],
+                    "session_id": str(self.conversation.session.id),
+                    "message_id": clarification_message.id,
+                    "show_final_options": True,  # Show final "Was this helpful?" options
+                    "timestamp": clarification_message.created_at.isoformat(),
+                }))
+            
+        except Exception as e:
+            await self.send_error(f"Clarification error: {str(e)}")
+
+    async def handle_no_clarification(self, data):
+        """Handle 'No' - show exploration options"""
+        await self.send(json.dumps({
+            "type": "exploration_options",
+            "message": "Was this response helpful? Would you like to explore related objections or topics?",
+            "options": [
+                "Explore related objections",
+                "Continue with new question", 
+                "End conversation"
+            ]
+        }))
+
+    def _generate_preachly_response(self, objection, tone, depth, user_context):
+        """Helper for Preachly response generation"""
+        return self.ai.generate_preachly_response(objection, tone, depth, user_context)
+
+    def _generate_clarification(self, original_response, tone):
+        """Generate focused clarification"""
+        try:
+            clarification_prompt = f"""Provide a focused clarification of this response using {tone} tone:
+
+    {original_response}
+
+    Guidelines:
+    - Briefly reaffirm the key point
+    - Add 1-2 new insights or examples
+    - Include 1-2 additional scripture references if relevant
+    - Maintain {tone} tone throughout
+    - Limit to 2-3 concise paragraphs
+    - End with inspiring conclusion"""
+
+            response = self.ai.client.chat.completions.create(
+                model=self.ai.model,
+                messages=[{"role": "user", "content": clarification_prompt}],
+                temperature=self.ai._get_tone_temperature(tone),
+                max_tokens=500,
+            )
+
+            return {
+                "content": response.choices[0].message.content,
+                "tokens_used": response.usage.total_tokens,
+                "success": True,
+            }
+        except Exception as e:
+            return {
+                "content": "I apologize, but I'm having trouble providing clarification right now.",
+                "success": False,
+                "error": str(e)
+            }
 
     async def handle_new_session(self):
         """Create new Bible chat session"""
