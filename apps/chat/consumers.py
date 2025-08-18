@@ -215,17 +215,44 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.send_error(f"Clarification error: {str(e)}")
 
     async def handle_no_clarification(self, data):
-        """Handle 'No' - show exploration options"""
+        """Handle 'No' - save BOTH user message AND the exploration response"""
+        
+        # Save the user's "No" message to database
+        user_message = data.get("message", "").strip()
+        await database_sync_to_async(self.conversation.add_message)(
+            content=user_message, is_user=True
+        )
+        
+        # Create the exploration response content
+        response_content = "Was this response helpful? Would you like to explore related objections or topics?"
+        
+        # Save the exploration response to database too
+        exploration_message = await database_sync_to_async(
+            self.conversation.add_message
+        )(
+            content=response_content,
+            is_user=False,
+            ai_metadata={
+                "content": response_content,
+                "type": "exploration_options",
+                "success": True,
+            }
+        )
+        
+        # Send exploration options to frontend
         await self.send(json.dumps({
             "type": "exploration_options",
-            "message": "Was this response helpful? Would you like to explore related objections or topics?",
+            "message": response_content,
+            "message_id": exploration_message.id,
+            "session_id": str(self.conversation.session.id),
+            "timestamp": exploration_message.created_at.isoformat(),
             "options": [
                 "Explore related objections",
                 "Continue with new question", 
                 "End conversation"
             ]
         }))
-
+        
     def _generate_preachly_response(self, objection, tone, depth, user_context):
         """Helper for Preachly response generation"""
         return self.ai.generate_preachly_response(objection, tone, depth, user_context)
