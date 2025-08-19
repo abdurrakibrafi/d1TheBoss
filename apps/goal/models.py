@@ -114,19 +114,22 @@ class UserGoal(models.Model):
         current_goal = cls.objects.filter(user=user, week_start=week_start).first()
         
         if current_goal:
+            # ADD THIS LINE - Get the new goal type
             new_goal_type = get_user_primary_goal_type(user)
             
             # ALWAYS update if goal type changed
             if current_goal.goal_type != new_goal_type:
                 current_goal.goal_type = new_goal_type
                 current_goal.target_count = 25 if new_goal_type == 'scripture' else 10
-                # DON'T reset progress - keep current_count and completed status
+                # Reset progress when goal type changes
+                current_goal.current_count = 0
+                current_goal.completed = False
                 current_goal.save()
                 
                 return current_goal, True
         
         return current_goal, False
-        
+            
     @classmethod
     def get_current_week_goals(cls, user):
         """Get goals for current week (kept for backward compatibility)"""
