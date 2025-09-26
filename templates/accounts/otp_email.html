@@ -2,21 +2,55 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>{{ purpose|title }} Code</title>
+    <title>{{ purpose|title }} Code - Preachly</title>
 </head>
-<body style="font-family: sans-serif; color: #333; line-height: 1.6; padding: 20px;">
-    <h2>Hello {{ user.first_name|default:"there" }},</h2>
+<body style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #2c3e50; line-height: 1.6; padding: 20px; background: #f8fafa;">
+    <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.08); overflow: hidden;">
+        
+        <!-- Header with your app's teal gradient -->
+        <div style="background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); padding: 32px 40px; text-align: center; position: relative;">
+            <h1 style="color: white; margin: 0; font-size: 32px; font-weight: 600; letter-spacing: -0.5px;">Preachly</h1>
+            <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0 0; font-size: 15px; font-weight: 400;">"Let the word of Christ dwell in you richly"</p>
+        </div>
 
-    <p>Your <strong>{{ purpose|title }}</strong> code is:</p>
+        <!-- Content -->
+        <div style="padding: 40px;">
+            <h2 style="color: #2c3e50; margin: 0 0 24px 0; font-size: 26px; font-weight: 500;">Peace be with you, {{ user.first_name|default:"Beloved" }}! 🙏</h2>
 
-    <h1 style="font-size: 32px; color: #2c3e50; margin: 20px 0;">{{ otp }}</h1>
+            <p style="font-size: 17px; margin-bottom: 28px; color: #5a6c7d;">Your <strong>{{ purpose|title }}</strong> verification code is ready:</p>
 
-    <p>This code will expire in <strong>{{ valid_minutes }} minutes</strong>.</p>
+            <!-- Code display matching your app's style -->
+            <div style="text-align: center; background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); padding: 32px; border-radius: 12px; margin: 28px 0; position: relative; overflow: hidden;">
+                <div style="position: absolute; top: -20px; right: -20px; width: 60px; height: 60px; background: rgba(255,255,255,0.1); border-radius: 50%;"></div>
+                <div style="position: absolute; bottom: -30px; left: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.08); border-radius: 50%;"></div>
+                <div style="font-size: 32px; margin-bottom: 12px;">✝️</div>
+                <h1 style="font-size: 42px; color: white; margin: 0; font-weight: 700; letter-spacing: 4px; text-shadow: 0 2px 8px rgba(0,0,0,0.1);">{{ otp }}</h1>
+            </div>
 
-    <p>Please do not share this code with anyone.</p>
+            <!-- Info card with golden accent like your app -->
+            <div style="background: linear-gradient(135deg, #FFF8E1 0%, #FFECB3 100%); padding: 24px; border-radius: 12px; border-left: 5px solid #FFB74D; margin: 28px 0;">
+                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 20px; margin-right: 12px;">⏰</span>
+                    <strong style="color: #E65100; font-size: 16px;">Expires in {{ valid_minutes }} minutes</strong>
+                </div>
+                <p style="margin: 0; color: #6D4C41; font-size: 14px; line-height: 1.5;">"Above all else, guard your heart, for everything you do flows from it" - Proverbs 4:23</p>
+            </div>
 
-    <hr>
-    <p style="color: #888;">If you didn’t request this, just ignore this email.</p>
-    <p>— The Bible Team</p>
+            <!-- Scripture highlight -->
+            <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, rgba(78, 205, 196, 0.08) 0%, rgba(68, 160, 141, 0.08) 100%); border-radius: 8px; margin-top: 32px;">
+                <p style="color: #44A08D; font-style: italic; margin: 0; font-size: 16px; font-weight: 500;">"Trust in the Lord with all your heart" - Proverbs 3:5</p>
+            </div>
+        </div>
+
+        <!-- Footer matching your app's clean style -->
+        <div style="background: #f8fafa; padding: 28px 40px; text-align: center; border-top: 1px solid #e8f0f0;">
+            <p style="color: #8fa3a3; margin: 0 0 12px 0; font-size: 14px;">If you didn't request this code, you can safely ignore this message.</p>
+            <div style="display: inline-flex; align-items: center; justify-content: center;">
+                <span style="color: #44A08D; font-weight: 600; font-size: 16px;">Blessings from Preachly</span>
+                <span style="margin-left: 8px; font-size: 16px;">✨</span>
+            </div>
+            <p style="color: #b3c6c6; font-size: 13px; margin: 8px 0 0 0; font-style: italic;">Growing together in faith and wisdom</p>
+        </div>
+    </div>
 </body>
 </html>

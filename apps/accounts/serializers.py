@@ -93,7 +93,7 @@ class InitiateRegistrationSerializer(serializers.Serializer):
             expires_at=timezone.now() + timedelta(minutes=10),
         )
 
-        send_otp_email(user, otp_code, "Verification")
+        send_otp_email(user, otp_code, "verification")
 
         return user, "Verification code sent to your email."
 

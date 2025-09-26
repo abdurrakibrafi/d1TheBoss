@@ -184,6 +184,52 @@ MEDIA_URL = "media/"
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
+
+# Redis for development
+CELERY_BROKER_URL = 'redis://redis:6379/0'
+CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [env("REDIS_URL", default="redis://redis:6379/0")],
+        },
+    },
+}
+
+# Development logging
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+}
+
+# Celery Configuration
+CELERY_BROKER_URL = env('REDIS_URL', default='redis://redis:6379/0')
+CELERY_RESULT_BACKEND = env('REDIS_URL', default='redis://redis:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+CELERY_ENABLE_UTC = True
+CELERY_TASK_DEFAULT_RETRY_DELAY = 60
+CELERY_TASK_MAX_RETRIES = 3
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000
+
+# Firebase Admin SDK
+FIREBASE_CREDENTIALS_PATH = env('FIREBASE_CREDENTIALS_PATH', default='firebase-credentials.json')
+
 # API Keys
 APP_NAME = env("APP_NAME", default="Bibel")
 OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
@@ -196,3 +242,7 @@ STRIPE_CURRENCY = "usd"
 
 # Bibel API
 BIBLE_API_KEY = env("BIBLE_API_KEY", default="")
+
+REVENUECAT_PUBLIC_KEY_ANDROID = env("REVENUECAT_PUBLIC_KEY_ANDROID", default="goog_your_key_here")
+REVENUECAT_PUBLIC_KEY_IOS = env("REVENUECAT_PUBLIC_KEY_IOS", default="appl_your_key_here")
+REVENUECAT_SECRET_KEY = env("REVENUECAT_SECRET_KEY", default="secrect_key ")
