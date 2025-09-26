@@ -85,7 +85,7 @@ services:
 
   nginx:
     image: nginx:alpine
-    container_name: hrai_nginx
+    container_name: bibel_nginx
     ports:
       - "80:80"
     volumes:
