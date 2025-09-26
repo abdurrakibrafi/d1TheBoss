@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: bibel_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    command: uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --reload
+
+  # Celery Worker
+  # celery:
+  #   build: .
+  #   container_name: bibel_celery
+  #   volumes:
+  #     - .:/app
+  #     - media_volume:/app/media
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - db
+  #     - redis
+  #   restart: unless-stopped
+  #   command: celery -A config worker --loglevel=info
+
+  # # Celery Beat (for scheduled tasks)
+  # celery-beat:
+  #   build: .
+  #   container_name: bibel_celery_beat
+  #   volumes:
+  #     - .:/app
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - db
+  #     - redis
+  #   restart: unless-stopped
+  #   command: celery -A config beat --loglevel=info
+
+  # # Celery Flower (monitoring UI)
+  # flower:
+  #   build: .
+  #   container_name: bibel_flower
+  #   ports:
+  #     - "5555:5555"
+  #   volumes:
+  #     - .:/app
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - redis
+  #   restart: unless-stopped
+  #   entrypoint: []  
+  #   command: celery -A config flower --port=5555 --address=0.0.0.0
+
+  db:
+    image: postgres:15
+    container_name: bibel_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: bibel_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: hrai_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/sites-available:/etc/nginx/sites-available:ro
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:
