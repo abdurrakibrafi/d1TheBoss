@@ -24,8 +24,17 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 from django.conf.urls.static import static
+from django.http import JsonResponse
 
+def api_root(request):
+    return JsonResponse({
+        'message': 'Preachly API is running',
+        'docs': '/api/docs/swagger/',
+        'admin': '/admin/',
+        'status': 'healthy'
+    })
 urlpatterns = [
+    path("", api_root, name="api_root"), 
     path("admin/", admin.site.urls),
     path("api/auth/", include("apps.accounts.urls")),
     path("api/core/", include("apps.core.urls")),
