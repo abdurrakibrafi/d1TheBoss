@@ -18,51 +18,6 @@ services:
     restart: unless-stopped
     command: uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --reload
 
-  # Celery Worker
-  # celery:
-  #   build: .
-  #   container_name: bibel_celery
-  #   volumes:
-  #     - .:/app
-  #     - media_volume:/app/media
-  #   env_file:
-  #     - .env
-  #   depends_on:
-  #     - db
-  #     - redis
-  #   restart: unless-stopped
-  #   command: celery -A config worker --loglevel=info
-
-  # # Celery Beat (for scheduled tasks)
-  # celery-beat:
-  #   build: .
-  #   container_name: bibel_celery_beat
-  #   volumes:
-  #     - .:/app
-  #   env_file:
-  #     - .env
-  #   depends_on:
-  #     - db
-  #     - redis
-  #   restart: unless-stopped
-  #   command: celery -A config beat --loglevel=info
-
-  # # Celery Flower (monitoring UI)
-  # flower:
-  #   build: .
-  #   container_name: bibel_flower
-  #   ports:
-  #     - "5555:5555"
-  #   volumes:
-  #     - .:/app
-  #   env_file:
-  #     - .env
-  #   depends_on:
-  #     - redis
-  #   restart: unless-stopped
-  #   entrypoint: []  
-  #   command: celery -A config flower --port=5555 --address=0.0.0.0
-
   db:
     image: postgres:15
     container_name: bibel_db
@@ -87,12 +42,16 @@ services:
     image: nginx:alpine
     container_name: bibel_nginx
     ports:
-      - "8080:80"
+      - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/sites-available:/etc/nginx/sites-available:ro
       - static_volume:/app/staticfiles
       - media_volume:/app/media
+      # Mount SSL certificates
+      - /etc/letsencrypt/live/preachly.app/fullchain.pem:/etc/ssl/certs/fullchain.pem:ro
+      - /etc/letsencrypt/live/preachly.app/privkey.pem:/etc/ssl/private/privkey.pem:ro
     depends_on:
       - web
     restart: unless-stopped
