@@ -87,7 +87,7 @@ services:
     image: rnwood/smtp4dev:linux-amd64-v3
     container_name: bibel_smtp4dev
     ports:
-      - "3000:80"
+      - "3005:80"
       - "2525:25"
     volumes:
       - smtp4dev_data:/smtp4dev

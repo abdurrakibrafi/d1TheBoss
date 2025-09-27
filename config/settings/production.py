@@ -55,6 +55,11 @@ EMAIL_HOST_USER = env.str('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = env.str('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = env.str('DEFAULT_FROM_EMAIL')
 
+BREVO_API_KEY = env.str('BREVO_API_KEY')
+BREVO_FROM_EMAIL = env.str('BREVO_FROM_EMAIL')
+BREVO_FROM_NAME = env.str('BREVO_FROM_NAME')
+
+
 # Static files with WhiteNoise
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
