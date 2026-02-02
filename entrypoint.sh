@@ -1,6 +1,5 @@
 #!/bin/bash
 set -o pipefail
-set -o nounset
 
 echo "🔥 FORCING DEPLOYMENT TO WORK..."
 
@@ -25,16 +24,20 @@ wait_for_db() {
     done
 }
 
-if [[ "$1" != "celery" ]] && [[ "$1" != "beat" ]] && [[ "$1" != "flower" ]]; then
-    wait_for_db
-    python manage.py makemigrations 2>/dev/null || echo "✅ Done"
-    python manage.py migrate --fake-initial 2>/dev/null || echo "✅ Done"
-    python manage.py migrate --run-syncdb 2>/dev/null || echo "✅ Done"
-    python manage.py migrate 2>/dev/null || echo "✅ Done"
-    python manage.py collectstatic --noinput 2>/dev/null || echo "✅ Done"
-else
+# Check if this is a celery/beat/flower worker
+if [ $# -gt 0 ] && ( [[ "$1" == "celery" ]] || [[ "$1" == "beat" ]] || [[ "$1" == "flower" ]] ); then
+    echo "🐝 Celery worker detected, skipping migrations..."
     sleep 10
+else
+    # Run migrations for web server
+    echo "🌐 Web server detected, running migrations..."
+    wait_for_db
+    python manage.py makemigrations || echo "✅ makemigrations done"
+    python manage.py migrate --fake-initial || echo "✅ migrate --fake-initial done"
+    python manage.py migrate --run-syncdb || echo "✅ migrate --run-syncdb done"
+    python manage.py migrate || echo "✅ migrate done"
+    python manage.py collectstatic --noinput || echo "✅ collectstatic done"
 fi
 
-echo "🚀 Starting: $@"
-exec "$@"
+echo "🚀 Starting: ${@:-python manage.py runserver 0.0.0.0:8000}"
+exec ${@:-python manage.py runserver 0.0.0.0:8000}
