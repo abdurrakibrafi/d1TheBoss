@@ -1,19 +1,20 @@
+# Create necessary directories
+mkdir -p /var/www/bibel-project/{logs,media,staticfiles}
+mkdir -p /var/www/certbot/.well-known/acme-challenge
+mkdir -p /var/www/bibel-project/nginx/sites-available
 
-Todo:
-  ☐ Item
-  ☐ SSS 
+# Set permissions
+chmod -R 755 /var/www/bibel-project
 
-Heel: 
+certbot certonly --standalone \
+  -d www.preachly.app \
+  -d api.preachly.app \
+  --email info@preachly.app \
+  --agree-tos \
+  --no-eff-email \
+  --non-interactive
 
-  ☐ fjdasf
-  ✔ jsdfSSD @started(25-07-02 04:17) @done(25-07-02 04:17) @lasted(53s)
 
-
-
-Commands:
-  ☐ docker compose exec web python manage.py makemigrations
-  
-  
-
-  
-  
+dig preachly.app A +short
+dig www.preachly.app A +short
+dig api.preachly.app A +short

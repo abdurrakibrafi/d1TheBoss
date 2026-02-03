@@ -35,3 +35,5 @@ python manage.py migrate || echo "✅ migrate done"
 python manage.py collectstatic --noinput || echo "✅ collectstatic done"
 echo "🚀 Starting web server..."
 exec uvicorn config.asgi:application --host 0.0.0.0 --port 8000
+
+
