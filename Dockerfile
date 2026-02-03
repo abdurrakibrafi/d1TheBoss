@@ -31,4 +31,3 @@ EXPOSE 8000
 
 # Use entrypoint to start app with auto-migrate + collectstatic + reload
 ENTRYPOINT ["/app/entrypoint.sh"]
-# CMD ["gunicorn", "config.asgi:application", "--bind", "0.0.0.0:8000"]
