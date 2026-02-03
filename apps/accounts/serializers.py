@@ -582,3 +582,15 @@ class ResendEmailChangeOTPSerializer(serializers.Serializer):
     # This serializer doesn't need any input fields since it just resends OTP
     # to the temp_email already stored in the user's profile
     pass
+
+
+class ParmanentAccountDeleteSerializer(serializers.Serializer):
+    confirm = serializers.BooleanField(required=True)
+
+    def validate_confirm(self, value):
+        if not value:
+            raise serializers.ValidationError(
+                "You must confirm to parmanent delete your account."
+            )
+        return value
+    

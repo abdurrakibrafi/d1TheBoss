@@ -17,6 +17,7 @@ from django.utils import timezone
 from datetime import timedelta
 import random
 from .serializers import (
+    ParmanentAccountDeleteSerializer,
     RegisterSerializer,
     VerifyEmailSerializer,
     PasswordResetRequestSerializer,
@@ -652,3 +653,20 @@ class CancelEmailChangeView(BaseResponseMixin, generics.GenericAPIView):
 
         except Exception as e:
             return self.handle_exception(e)
+
+
+class ParmanentAccountDeleteView(BaseResponseMixin, APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+    throttle_classes = [UserRateThrottle]
+
+    def post(self, request):
+        serializer = ParmanentAccountDeleteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        user.delete()
+
+        return self.success_response(
+            message="Account has been deleted successfully"
+        )
+    

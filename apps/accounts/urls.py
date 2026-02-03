@@ -3,6 +3,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
+    ParmanentAccountDeleteView,
     RegisterView,
     LoginView,
     LogoutView,
@@ -76,6 +77,8 @@ urlpatterns = [
         CancelEmailChangeView.as_view(),
         name="cancel-email-change",
     ),
+    path("parmanent/delete/", ParmanentAccountDeleteView.as_view(), name="parmanent-delete"),
+
     # Social auth
     path("social-auth/", SocialAuthView.as_view(), name="social-auth"),
     # Commented out endpoints (uncomment when needed)
@@ -83,4 +86,10 @@ urlpatterns = [
     # path("apple/login/", AppleLogin.as_view(), name="apple_login"),
     # path("account/delete/", AccountSoftDeleteView.as_view(), name="account-delete"),
     # path("account/restore/", AccountRestoreView.as_view(), name="account-restore"),
+
+
 ]
+
+
+
+
