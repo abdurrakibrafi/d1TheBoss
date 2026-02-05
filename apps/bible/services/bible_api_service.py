@@ -33,8 +33,8 @@ class BibleAPIService:
         except ImportError:
             # Fallback to hardcoded versions if onboarding app not available
             return {
-                'NIV': '06125adad2d5898a-01',
-                'ASV': '685d1470fe4d5c3b-01',
+                'ASV': '06125adad2d5898a-01',
+                'ASV-BYZ': '685d1470fe4d5c3b-01',
                 'WEB': '72f4e6dc683324df-01',
                 'KJV': '2eb94132ad61ae75-01'
             }

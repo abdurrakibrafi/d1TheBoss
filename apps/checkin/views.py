@@ -749,7 +749,7 @@ class PopulateBadgeTemplatesAPIView(BaseResponseMixin, APIView):
             {
                 'badge_type': 'default',
                 'title': 'Welcome to the Glow-Up',
-                'description': 'You just took the realest step: showing up. This little candle\'s your holy hype man, here to remind you that even small steps matter. You\'re not just checking in, you\'re planting seeds, watering roots, and building a flame that\'s gonna burn brighter than your screen on max brightness at midnight.',
+                'description': 'You just took the realest step: showing up. This little candle\'s your holy hype man, here to remind you that even small steps matter. You\'re not just checking in, you\'re planting seeds, watering roots, and building a flame that\'s gonna burn brighter than your screen on max brightness at midnight. Complete your first check in now!',
                 'order': 1,
                 'days_required': 0
             },
