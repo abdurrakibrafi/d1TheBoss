@@ -74,17 +74,25 @@ class InitiateRegistrationSerializer(serializers.Serializer):
         return value
 
     def send_registration_otp(self, email):
-        # Check if user already exists
-        if User.objects.filter(email=email).exists():
+        # Check if active user already exists
+        if User.objects.filter(email=email, is_active=True).exists():
             return None, "User with this email already exists."
 
-        otp_code = "".join(random.choices("0123456789", k=4))
+        # Check if inactive user exists (unverified)
+        try:
+            user = User.objects.get(email=email, is_active=False)
+            # Mark any existing unused verification OTPs as used
+            OTP.objects.filter(
+                user=user, purpose="verification", is_used=False
+            ).update(is_used=True)
+        except User.DoesNotExist:
+            # Create inactive user first
+            user = User.objects.create(
+                email=email,
+                is_active=False,
+            )
 
-        # Create inactive user first
-        user = User.objects.create(
-            email=email,
-            is_active=False,
-        )
+        otp_code = "".join(random.choices("0123456789", k=4))
 
         otp = OTP.objects.create(
             user=user,
