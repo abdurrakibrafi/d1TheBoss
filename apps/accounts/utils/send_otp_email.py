@@ -24,7 +24,14 @@ from django.conf import settings
 from apps.core.utils.brevo_service import BrevoEmailService
 
 
-def send_otp_email(user, otp_code, purpose):
+def send_otp_email(user, otp_code, purpose, to_email=None):
+    """Send an OTP email via Brevo.
+
+    ``to_email`` overrides the address derived from ``user`` when provided.  This
+    is useful during email change flows where the OTP should be sent to the new
+    address rather than the current one on the user object.
+    """
+
     brevo_service = BrevoEmailService()
 
     subject = (
@@ -36,10 +43,13 @@ def send_otp_email(user, otp_code, purpose):
     text_content = render_to_string("accounts/otp_email.txt", context)
     html_content = render_to_string("accounts/otp_email.html", context)
 
+    recipient = to_email or user.email
+    name = getattr(user, "profile", None) and user.profile.name
+
     brevo_service.send_transactional_email(
-        to_email=user.email,
-        to_name=user.profile.name,
+        to_email=recipient,
+        to_name=name,
         subject=subject,
         html_content=html_content,
-        text_content=text_content
+        text_content=text_content,
     )

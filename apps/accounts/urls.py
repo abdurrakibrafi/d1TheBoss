@@ -86,10 +86,9 @@ urlpatterns = [
     # path("apple/login/", AppleLogin.as_view(), name="apple_login"),
     # path("account/delete/", AccountSoftDeleteView.as_view(), name="account-delete"),
     # path("account/restore/", AccountRestoreView.as_view(), name="account-restore"),
-
-
 ]
 
 
 
 
+ 
