@@ -33,6 +33,7 @@ def api_root(request):
         'admin': '/admin/',
         'status': 'healthy'
     })
+
 urlpatterns = [
     path("", api_root, name="api_root"), 
     path("admin/", admin.site.urls),

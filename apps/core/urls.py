@@ -15,4 +15,8 @@ urlpatterns = [
     ),
     path('weekly-checkin/populate/', views.populate_weekly_checkin_questions, name='populate_weekly_checkin'),
     path('weekly-checkin/questions/', views.get_weekly_checkin_questions, name='get_weekly_checkin_questions'),
+
+    path("daily-modal-checkin/", views.get_daily_modal_checkin, name="get_daily_modal_checkin"),
+
+
 ]

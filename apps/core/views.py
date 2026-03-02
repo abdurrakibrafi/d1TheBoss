@@ -8,7 +8,7 @@ from django.views.generic import TemplateView
 from rest_framework import generics
 from apps.core.serializers import LegalDocumentSerializer
 from apps.core.models import LegalDocument
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework import status
 from apps.onboarding.models import (
     JourneyReasonOption,
@@ -19,6 +19,9 @@ from apps.onboarding.models import (
     BibleFamiliarityOption,
     BibleVersionOption,
 )
+from django.core.cache import cache
+from datetime import datetime
+from rest_framework.permissions import IsAuthenticated
 
 
 class TermsAndConditionsView(BaseResponseMixin, generics.RetrieveAPIView):
@@ -495,3 +498,45 @@ def get_weekly_checkin_questions(request):
             'message': f'Error retrieving questions: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_daily_modal_checkin(request):
+    """
+    API endpoint to check if daily modal should be shown to user.
+    Returns true only once per day per user.
+    On subsequent requests the same day, returns false.
+    Resets the next day.
+    """
+    try:
+        user = request.user
+        
+        # Create cache key with user ID and today's date
+        today = datetime.now().strftime('%Y-%m-%d')
+        cache_key = f'daily_modal_checkin_{user.id}_{today}'
+        
+        # Check if user already accessed modal today
+        if cache.get(cache_key):
+            # Already showed modal today
+            return Response({
+                'success': True,
+                'show_modal': False,
+                'message': 'Modal already shown today'
+            }, status=status.HTTP_200_OK)
+        
+        # First time accessing today - set cache and return true
+        # Cache expires in 24 hours
+        cache.set(cache_key, True, 86400)
+        
+        return Response({
+            'success': True,
+            'show_modal': True,
+            'message': 'Show modal to user'
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'show_modal': False,
+            'message': f'Error checking daily modal: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
