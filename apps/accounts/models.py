@@ -6,6 +6,9 @@ from django.dispatch import receiver
 from django.utils import timezone
 from django.conf import settings
 
+# import here to avoid circular import issues when user model is imported elsewhere
+from apps.checkin.models import UserWeeklyCheckin
+
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -159,6 +162,13 @@ class UserProfile(models.Model):
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
         UserProfile.objects.create(user=instance)
+        # immediately give the user week‑1 weekly checkin availability
+        # this satisfies client request: no waiting 7-day streak to begin
+        UserWeeklyCheckin.objects.get_or_create(
+            user=instance,
+            week_number=1,
+            defaults={'is_available': True, 'is_completed': False}
+        )
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
