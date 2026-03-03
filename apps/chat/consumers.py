@@ -49,6 +49,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 self.conversation = await database_sync_to_async(ConversationManager)(
                     user=self.user, session_id=self.session_id
                 )
+                # Refresh the session's context snapshot from latest onboarding
+                # data so updates (e.g. tone changes) are reflected immediately.
+                await database_sync_to_async(
+                    lambda: self.conversation.update_session_context(
+                        self.conversation._get_user_spiritual_context()
+                    )
+                )()
             except Exception as e:
                 await self.close(code=4004)
                 return
