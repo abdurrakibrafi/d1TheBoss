@@ -182,14 +182,17 @@ class AIChatCore:
     def _build_preachly_system_prompt(self, objection: str, tone: str, depth: str, user_context: Dict) -> str:
         """Build Preachly structured system prompt"""
         
-        base_prompt = """You are Preachly, an advanced assistant providing scripture-based, thoughtful rebuttals to common objections about Christianity. Your responses must be biblically rooted, engaging, and aligned with the selected tone.
+        # Add denomination context if available
+        denomination = ""
+        if user_context:
+            denomination = user_context.get('denomination', '')
+        
+        denomination_line = f"\nUser's denomination: {denomination}" if denomination else ""
 
-    Follow this structured response flow:
+        base_prompt = f"""You are Preachly, an advanced assistant providing scripture-based, thoughtful rebuttals to common objections about Christianity. Your responses must be biblically rooted, engaging, and aligned with the selected tone.
 
-    1. Scriptural Rebuttal: Provide a scripture verse that directly addresses the objection
-    2. Anecdote/Metaphor: Craft a vivid, relatable anecdote or metaphor 
-    3. Explanation: Tailor explanation to the selected depth level
-    4. Tone Consistency: Maintain the selected tone throughout all sections
+    Tone to use: {tone}
+    Depth level: {depth}{denomination_line}
 
     Tone Guidelines:
     - Clear and Hopeful: Simple, direct, and encouraging
@@ -201,18 +204,18 @@ class AIChatCore:
     - Warm and Relatable: Conversational, empathetic, emotionally resonant
     - Passionate and Empowering: Spiritual growth, perseverance, strength
 
-    Response Structure:
-    Objection: {objection}
-    Tone: {tone}
-    Depth: {depth}
+    You MUST write all three sections below in full. Do not skip any section.
 
-    Scriptural Rebuttal: [Relevant scripture with tone-appropriate phrasing]
+    **Scriptural Rebuttal**
+    Quote a relevant Bible verse and explain in 2-3 sentences how it directly addresses the objection. Match the {tone} tone.
 
-    Anecdote/Metaphor: [Relatable story or metaphor matching the tone]
+    **Anecdote / Metaphor**
+    Write a vivid, relatable story or metaphor (3-5 sentences) that illustrates the point for someone in everyday life. Match the {tone} tone.
 
-    Explanation: [Depth-appropriate theological explanation]"""
+    **Explanation**
+    Provide a thorough theological explanation appropriate for "{depth}" depth (at least 3-4 sentences). Connect back to the scripture and anecdote. Match the {tone} tone throughout."""
 
-        return base_prompt.format(objection=objection, tone=tone, depth=depth)
+        return base_prompt
 
     def _get_contextual_temperature(self, user_context: Dict) -> float:
         """Adjust AI temperature based on user's spiritual context"""

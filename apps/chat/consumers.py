@@ -134,6 +134,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 self.conversation.get_user_spiritual_context
             )()
 
+            saved_tone = (
+                user_context.get("tone_preference", {}).get("name")
+                if user_context
+                else None
+            )
+            if saved_tone:
+                tone = saved_tone
+
             # Handle different message types
             if message_type == "yes_no":
                 if message.lower() in ["yes", "yes, explain more"]:
@@ -194,8 +202,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 return
                 
             # Generate clarification
+            user_context = await database_sync_to_async(
+                self.conversation.get_user_spiritual_context
+            )()
+            saved_tone = (
+                user_context.get("tone_preference", {}).get("name")
+                if user_context
+                else data.get("tone", "Clear and Hopeful")
+            )
             clarification_data = await asyncio.get_event_loop().run_in_executor(
-                None, self._generate_clarification, last_message.content, data.get("tone", "Clear and Hopeful")
+                None, self._generate_clarification, last_message.content, saved_tone
             )
             
             if clarification_data["success"]:
