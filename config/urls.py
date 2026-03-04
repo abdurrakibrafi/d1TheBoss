@@ -25,6 +25,7 @@ from drf_spectacular.views import (
 )
 from django.conf.urls.static import static
 from django.http import JsonResponse
+from config.views import TermsView, PrivacyView
 
 def api_root(request):
     return JsonResponse({
@@ -64,6 +65,13 @@ urlpatterns += [
         "api/docs/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"
     ),
 ]
+
+urlpatterns += [
+    path("terms/", TermsView.as_view(), name="terms"),
+    path("privacy/", PrivacyView.as_view(), name="privacy"),
+]
+
+
 
 
 if settings.DEBUG:  # in development it already works
