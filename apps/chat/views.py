@@ -19,29 +19,59 @@ from apps.chat.serializers import ChatMessageSerializer, ChatSessionSerializer, 
 
 # API Views
 class CreateChatSessionView(BaseResponseMixin, APIView):
-    """Create a new chat session for the authenticated user"""
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
+        print("DEBUG - CreateChatSessionView.post: Creating/saving session")
         try:
-            print(f"CreateChatSessionView called by {request.user}")
+            session_id = request.data.get('session_id')
+            print(f"DEBUG - session_id received: {session_id}")
 
-            # Let ConversationManager handle session creation (it already does this correctly)
-            conversation_manager = ConversationManager(user=request.user)
-            
-            # Get the session that ConversationManager already created
-            session = conversation_manager.session
-            
-            print(f"Created new chat session: {session.id} for user {request.user.email}")
-            
-            # Serialize and return
-            serializer = ChatSessionSerializer(session)
-            return self.created_response(
-                data=serializer.data,
-                message="Chat session created successfully"
+            session = None
+            if session_id:
+                session = ChatSession.objects.get(id=session_id, user=request.user)
+                print(f"DEBUG - Found session, is_saved before: {session.is_saved}, messages: {session.message_count}")
+                session.is_saved = True
+                session.is_active = True
+                if not session.title:
+                    session.title = f"Bible Conversation - {timezone.now().strftime('%B %d')}"
+                session.save()
+                print(f"DEBUG - Session saved! is_saved now: {session.is_saved}")
+
+            # DEBUG - print what we're about to delete
+            leftover = ChatSession.objects.filter(
+                user=request.user,
+                is_saved=False,
             )
-            
+            if session_id:
+                leftover = leftover.exclude(id=session_id)
+
+            print(f"DEBUG - About to delete these sessions:")
+            for s in leftover:
+                print(f"  → id: {s.id}, is_saved: {s.is_saved}, messages: {s.message_count}")
+
+            count = leftover.count()
+            leftover.delete()
+            print(f"DEBUG - Cleaned up {count} leftover temp sessions")
+
+            # Now create ONE fresh temp session
+            new_conversation = ConversationManager(user=request.user)
+            new_session = new_conversation.session
+            print(f"DEBUG - New temp session created: {new_session.id}")
+
+            return self.created_response(
+                data={
+                    'saved_session': ChatSessionSerializer(session).data if session else None,
+                    'new_session': ChatSessionSerializer(new_session).data
+                },
+                message="Session saved and new session started"
+            )
+
+        except ChatSession.DoesNotExist:
+            print(f"DEBUG - Session NOT found: {session_id}")
+            return self.not_found_response(message="Session not found")
         except Exception as e:
+            print(f"DEBUG - Exception: {str(e)}")
             return self.handle_exception(e)
     
     def _generate_session_title(self, user_context):
@@ -56,6 +86,42 @@ class CreateChatSessionView(BaseResponseMixin, APIView):
         else:
             return f"Bible Conversation - {timezone.now().strftime('%B %d')}"
 
+class StartChatSessionView(BaseResponseMixin, APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        print("DEBUG - StartChatSessionView.post: Starting new session")
+        try:
+            # Check if unsaved temp session already exists
+            existing_session = ChatSession.objects.filter(
+                user=request.user,
+                is_saved=False,
+                is_active=True
+            ).order_by('-created_at').first()
+
+            if existing_session:
+                # Return same temp session
+                serializer = ChatSessionSerializer(existing_session)
+                print(f"DEBUG - StartChatSessionView.post: Resumed existing session {existing_session.id}")
+                return self.success_response(
+                    data=serializer.data,
+                    message="Resumed existing session"
+                )
+
+            # No temp session exists — create fresh one
+            conversation_manager = ConversationManager(user=request.user)
+            new_session = conversation_manager.session
+            print(f"DEBUG - StartChatSessionView.post: Created new session {new_session.id}")
+
+            serializer = ChatSessionSerializer(new_session)
+            return self.created_response(
+                data=serializer.data,
+                message="New session started"
+            )
+
+        except Exception as e:
+            print(f"DEBUG - StartChatSessionView.post: Exception {str(e)}")
+            return self.handle_exception(e)
 
 class ChatSessionListView(BaseResponseMixin, generics.ListAPIView):
     """List all chat sessions for the authenticated user"""
@@ -65,25 +131,28 @@ class ChatSessionListView(BaseResponseMixin, generics.ListAPIView):
     def get_queryset(self):
         queryset = ChatSession.objects.filter(
             user=self.request.user,
-            is_active=True
+            is_active=True,
+            is_saved=True 
         ).order_by('-updated_at')
-        
-        # Filter by favorites if requested
+
         is_favorite = self.request.query_params.get('favorite', None)
         if is_favorite == 'true':
             queryset = queryset.filter(is_favorite=True)
-        
+
         return queryset
 
     def list(self, request, *args, **kwargs):
+        print("DEBUG - ChatSessionListView.list: Listing chat sessions")
         try:
             queryset = self.get_queryset()
             serializer = self.get_serializer(queryset, many=True)
+            print(f"DEBUG - ChatSessionListView.list: Found {len(serializer.data)} sessions")
             return self.success_response(
                 data=serializer.data,
                 message="Chat sessions retrieved successfully"
             )
         except Exception as e:
+            print(f"DEBUG - ChatSessionListView.list: Exception {str(e)}")
             return self.handle_exception(e)
 
 
@@ -92,6 +161,7 @@ class ChatSessionDetailView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request, session_id):
+        print(f"DEBUG - ChatSessionDetailView.get: Getting session {session_id}")
         try:
             session = ChatSession.objects.get(
                 id=session_id,
@@ -99,14 +169,17 @@ class ChatSessionDetailView(BaseResponseMixin, APIView):
             )
             
             serializer = ChatSessionDetailSerializer(session)
+            print(f"DEBUG - ChatSessionDetailView.get: Session {session_id} has {len(serializer.data.get('messages', []))} messages")
             return self.success_response(
                 data=serializer.data,
                 message="Chat session retrieved successfully"
             )
             
         except ChatSession.DoesNotExist:
+            print(f"DEBUG - ChatSessionDetailView.get: Session {session_id} not found")
             return self.not_found_response(message="Session not found")
         except Exception as e:
+            print(f"DEBUG - ChatSessionDetailView.get: Exception {str(e)}")
             return self.handle_exception(e)
         
 
@@ -486,11 +559,17 @@ class ExportChatHistoryView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
+        print("DEBUG - ExportChatHistoryView.get: Exporting chat history")
         try:
             sessions = ChatSession.objects.filter(
                 user=request.user,
+                is_saved=True
             ).prefetch_related('messages')
-            
+
+            print(f"DEBUG export - all is_saved sessions:")
+            for s in sessions:
+                print(f"  → id: {s.id}, is_active: {s.is_active}, is_saved: {s.is_saved}, messages: {s.message_count}")
+                
             export_data = {
                 'user_id': request.user.id,
                 'export_date': timezone.now().isoformat(),
@@ -503,6 +582,7 @@ class ExportChatHistoryView(BaseResponseMixin, APIView):
                     'title': session.title,
                     'created_at': session.created_at.isoformat(),
                     'updated_at': session.updated_at.isoformat(),
+                    'is_saved': session.is_saved,
                     'is_favorite': session.is_favorite,
                     'message_count': session.message_count,
                     'messages': []
@@ -528,13 +608,35 @@ class ExportChatHistoryView(BaseResponseMixin, APIView):
                 
                 export_data['sessions'].append(session_data)
             
+            print(f"DEBUG - ExportChatHistoryView.get: Exported {len(export_data['sessions'])} sessions")
             return self.success_response(
                 data=export_data,
                 message="Chat history exported successfully"
             )
         except Exception as e:
+            print(f"DEBUG - ExportChatHistoryView.get: Exception {str(e)}")
             return self.handle_exception(e)
-        
+
+class ClearAllChatHistoryView(BaseResponseMixin, APIView):
+    """Delete all saved chat sessions for the user"""
+    permission_classes = [IsAuthenticated]
+    
+    def delete(self, request):
+        print("DEBUG - ClearAllChatHistoryView.delete: Clearing all chat history")
+        try:
+            deleted_count, _ = ChatSession.objects.filter(
+                user=request.user,
+                is_saved=True
+            ).delete()
+            
+            print(f"DEBUG - ClearAllChatHistoryView.delete: Deleted {deleted_count} sessions")
+            return self.success_response(
+                data={'deleted_sessions': deleted_count},
+                message=f"All chat history cleared successfully"
+            )
+        except Exception as e:
+            print(f"DEBUG - ClearAllChatHistoryView.delete: Exception {str(e)}")
+            return self.handle_exception(e)
 
 import os
 import tempfile

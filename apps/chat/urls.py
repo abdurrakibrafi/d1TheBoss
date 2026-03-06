@@ -4,12 +4,13 @@ from apps.chat.views import (
     ChatSessionUpdateView, ChatSessionDeleteView, BookmarkMessageView,
     BookmarkedMessagesView, RegenerateResponseView, SearchChatHistoryView,
     FavoriteChatSessionView, NeedMoreClarityView, ChatStatisticsView,
-    ExportChatHistoryView, VoiceToTextAPIView
+    ExportChatHistoryView, VoiceToTextAPIView, ClearAllChatHistoryView, StartChatSessionView
 )
 
 urlpatterns = [
     # Session management - UUID
     path('sessions/', ChatSessionListView.as_view(), name='chat-session-list'),
+    path('sessions/start/', StartChatSessionView.as_view(), name='start-chat-session'),
     path('sessions/create/', CreateChatSessionView.as_view(), name='chat-session-create'),
     path('sessions/<uuid:session_id>/', ChatSessionDetailView.as_view(), name='chat-session-detail'),
     path('sessions/<uuid:session_id>/update/', ChatSessionUpdateView.as_view(), name='chat-session-update'),
@@ -21,6 +22,8 @@ urlpatterns = [
     path('messages/<int:message_id>/regenerate/', RegenerateResponseView.as_view(), name='regenerate-response'),
     path('messages/<int:message_id>/clarity/', NeedMoreClarityView.as_view(), name='need-more-clarity'),
     path('messages/bookmarked/', BookmarkedMessagesView.as_view(), name='bookmarked-messages'),
+
+    path('history/clear/', ClearAllChatHistoryView.as_view(), name='clear-all-chat-history'),
     
     # Search and utilities
     path('search/', SearchChatHistoryView.as_view(), name='search-chat-history'),

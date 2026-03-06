@@ -21,7 +21,7 @@ class ChatSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatSession
         fields = [
-            'id', 'title', 'is_active', 'message_count', 'tokens_used',
+            'id', 'title', 'is_active', 'is_saved', 'message_count', 'tokens_used',
             'created_at', 'updated_at', 'last_message_at', 'is_favorite'
         ]
         read_only_fields = ['id', 'message_count', 'tokens_used', 'created_at', 'updated_at']
@@ -38,7 +38,7 @@ class ChatSessionDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatSession
         fields = [
-            'id', 'title', 'is_active', 'message_count', 'tokens_used',
+            'id', 'title', 'is_active', 'is_saved', 'message_count', 'tokens_used',
             'created_at', 'updated_at', 'messages', 'spiritual_context', 'is_favorite'
         ]
     

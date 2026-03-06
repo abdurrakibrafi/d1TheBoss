@@ -18,6 +18,7 @@ class ChatSession(models.Model):
     title = models.CharField(max_length=200, blank=True)
     context_snapshot = models.JSONField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
+    is_saved = models.BooleanField(default=False)
     is_favorite = models.BooleanField(default=False)
 
     message_count = models.PositiveIntegerField(default=0)

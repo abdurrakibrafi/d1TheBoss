@@ -229,8 +229,15 @@ class ConversationManager:
 
     def end_session(self):
         """End conversation session"""
-        self.session.is_active = False
-        self.session.save()
+        # Refresh from DB to get latest is_saved value
+        self.session.refresh_from_db()
+        print(f"DEBUG end_session called: id={self.session.id}, is_saved={self.session.is_saved}")
+        if not self.session.is_saved:
+            self.session.is_active = False
+            self.session.save()
+            print(f"DEBUG end_session: deactivated temp session {self.session.id}")
+        else:
+            print(f"DEBUG end_session: SKIPPED - session is saved!")
 
     def get_bookmarked_messages(self) -> List[Dict]:
         """Get bookmarked messages from this session"""
