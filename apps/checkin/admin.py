@@ -66,11 +66,11 @@ from .models import BadgeTemplate, UserAppBadge
 
 @admin.register(BadgeTemplate)
 class BadgeTemplateAdmin(admin.ModelAdmin):
-    list_display = ('title', 'badge_type', 'order', 'days_required', 'image_tag')
+    list_display = ('title', 'badge_type', 'order', 'weeks_required', 'image_tag')
     list_filter = ('badge_type',)
     search_fields = ('title', 'description')
     ordering = ('order',)
-    list_editable = ('order', 'days_required')
+    list_editable = ('order', 'weeks_required')
     readonly_fields = ('image_preview',)
 
     def image_tag(self, obj):

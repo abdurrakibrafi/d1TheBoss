@@ -17,3 +17,20 @@ app.autodiscover_tasks()
 @app.task(bind=True)
 def debug_task(self):
     print(f'Request: {self.request!r}')
+
+
+from celery.schedules import crontab
+ 
+CELERY_BEAT_SCHEDULE = {
+    # Every Sunday at 00:00 UTC — close last week (mark missed)
+    'close-week-saturday-midnight': {
+        'task': 'checkin.close_week_on_saturday',
+        'schedule': crontab(hour=0, minute=0, day_of_week='sunday'),
+    },
+    # Every Sunday at 00:01 UTC — open new week for all users
+    'create-weekly-checkins-sunday': {
+        'task': 'checkin.create_weekly_checkins_for_all_users',
+        'schedule': crontab(hour=0, minute=1, day_of_week='sunday'),
+    },
+}
+ 

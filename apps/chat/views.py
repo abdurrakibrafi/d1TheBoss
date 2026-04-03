@@ -433,9 +433,14 @@ class FavoriteChatSessionView(BaseResponseMixin, APIView):
 
 
 class NeedMoreClarityView(BaseResponseMixin, APIView):
-    """Handle "Need more clarity?" feedback on AI responses"""
+    """
+    Handle 'Need more clarity?' — YES or NO.
+    YES → Deeper clarification (no restating, max 120 words)
+    NO  → AI suggests follow-up conversation question
+           Frontend MUST append '— or —\nStart a new chat' as static UI text
+    """
     permission_classes = [IsAuthenticated]
-    
+ 
     def post(self, request, message_id):
         try:
             ai_message = ChatMessage.objects.get(
@@ -443,78 +448,85 @@ class NeedMoreClarityView(BaseResponseMixin, APIView):
                 session__user=request.user,
                 is_user=False
             )
-            
+ 
             needs_clarity = request.data.get('needs_clarity', True)
-            
-            # Update AI metadata with clarity feedback
+ 
+            # Record feedback
             metadata = ai_message.ai_metadata or {}
             metadata['clarity_feedback'] = {
                 'needs_clarity': needs_clarity,
                 'timestamp': timezone.now().isoformat(),
-                'feedback_provided': True
             }
             ai_message.ai_metadata = metadata
             ai_message.save()
-            
+ 
+            # Get user's tone preference
+            conversation_manager = ConversationManager(
+                user=request.user,
+                session_id=str(ai_message.session.id)
+            )
+            user_context = conversation_manager.get_user_spiritual_context()
+            tone = (
+                user_context.get("tone_preference", {}).get("name", "Clear and Hopeful")
+                if user_context else "Clear and Hopeful"
+            )
+ 
+            ai_core = AIChatCore()
+ 
             if needs_clarity:
-                # Generate follow-up clarification
-                conversation_manager = ConversationManager(
-                    user=request.user,
-                    session_id=str(ai_message.session.id)
+                # YES → deeper expansion
+                result = ai_core.generate_clarification_yes(
+                    original_response=ai_message.content,
+                    tone=tone,
                 )
-                
-                # Create a clarification prompt
-                clarification_prompt = f"""The user indicated they need more clarity on your previous response: "{ai_message.content[:200]}..."
-
-Please provide a clearer, more detailed explanation that addresses potential confusion. Focus on:
-1. Simplifying complex concepts
-2. Providing additional context
-3. Using more relatable examples
-4. Breaking down the information into smaller parts"""
-                
-                # Get user context
-                user_context = conversation_manager.get_user_spiritual_context()
-                
-                # Generate clarification
-                ai_core = AIChatCore()
-                clarification_history = [{"role": "user", "content": clarification_prompt}]
-                
-                clarification_response = ai_core.generate_bible_response(
-                    conversation_history=clarification_history,
-                    user=request.user,
-                    user_context=user_context
-                )
-                
-                if clarification_response["success"]:
-                    # Create new clarification message
-                    clarification_message = conversation_manager.add_message(
-                        content=clarification_response["content"],
+ 
+                if result["success"]:
+                    new_message = conversation_manager.add_message(
+                        content=result["content"],
                         is_user=False,
-                        ai_metadata=clarification_response
+                        ai_metadata=result,
                     )
-                    
                     return self.success_response(
                         data={
-                            'needs_clarity': needs_clarity,
+                            'needs_clarity': True,
                             'clarification_provided': True,
-                            'clarification_message': ChatMessageSerializer(clarification_message).data
+                            'clarification_message': ChatMessageSerializer(new_message).data
                         },
-                        message="Clarification provided successfully"
+                        message="Clarification provided"
                     )
-            
-            return self.success_response(
-                data={
-                    'needs_clarity': needs_clarity,
-                    'clarification_provided': False
-                },
-                message="Feedback recorded successfully"
+            else:
+                # NO → follow-up question suggestion
+                result = ai_core.generate_clarification_no(
+                    original_response=ai_message.content,
+                    tone=tone,
+                )
+ 
+                if result["success"]:
+                    new_message = conversation_manager.add_message(
+                        content=result["content"],
+                        is_user=False,
+                        ai_metadata=result,
+                    )
+                    return self.success_response(
+                        data={
+                            'needs_clarity': False,
+                            'clarification_provided': True,
+                            # Frontend renders '— or —\nStart a new chat' below this
+                            'show_new_chat_option': True,
+                            'continuation_message': ChatMessageSerializer(new_message).data
+                        },
+                        message="Follow-up question generated"
+                    )
+ 
+            return self.error_response(
+                message="Failed to generate response",
+                status_code=500
             )
-            
+ 
         except ChatMessage.DoesNotExist:
             return self.not_found_response(message="Message not found")
         except Exception as e:
             return self.handle_exception(e)
-
 
 class ChatStatisticsView(BaseResponseMixin, APIView):
     """Get user's chat statistics"""

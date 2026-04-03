@@ -17,18 +17,31 @@ class ChatSessionSerializer(serializers.ModelSerializer):
     message_count = serializers.ReadOnlyField()
     last_message_at = serializers.SerializerMethodField()
     is_favorite = serializers.BooleanField(default=False)
-    
+    # NEW: preview shows first user question, NOT the AI response
+    preview = serializers.SerializerMethodField()
+ 
     class Meta:
         model = ChatSession
         fields = [
             'id', 'title', 'is_active', 'is_saved', 'message_count', 'tokens_used',
-            'created_at', 'updated_at', 'last_message_at', 'is_favorite'
+            'created_at', 'updated_at', 'last_message_at', 'is_favorite', 'preview'
         ]
         read_only_fields = ['id', 'message_count', 'tokens_used', 'created_at', 'updated_at']
-    
+ 
     def get_last_message_at(self, obj):
         last_message = obj.messages.last()
         return last_message.created_at if last_message else obj.created_at
+ 
+    def get_preview(self, obj):
+        """Return the first user question — truncated with '...' if too long"""
+        first_user_message = obj.messages.filter(is_user=True).order_by('created_at').first()
+        if not first_user_message or not first_user_message.content:
+            return ""
+        content = first_user_message.content
+        # Truncate at 100 chars
+        if len(content) > 100:
+            return content[:97] + "..."
+        return content
 
 
 class ChatSessionDetailSerializer(serializers.ModelSerializer):

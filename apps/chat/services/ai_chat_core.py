@@ -5,250 +5,458 @@ from typing import List, Dict, Optional
 from django.conf import settings
 
 
+# ─── Tier Prompts ────────────────────────────────────────────────────────────────
+
+TIER_CONVERSATION_READY = """You are a Christian articulation assistant for the Preachly app.
+Your task is to generate a "Conversation Ready" response to a user-submitted objection or faith-based question.
+When responding to objections, explain the Christian perspective rather than correcting the questioner's position.
+Frame ideas positively instead of refuting opposing views.
+This tier is designed to give believers something they can confidently say in a real conversation.
+
+The response MUST follow this exact structure:
+
+CONVERSATION READY
+
+1. Direct Answer (Clear & Decisive)
+Begin with a clear, confident answer in 1–2 sentences.
+No hedging language. If relevant, include one short Scripture quote integrated naturally.
+
+2. Clarifying Frame (Balanced Theology)
+2–4 short sentences (max 80 words) explaining the theological framing.
+Emphasize grace-first Christianity. Keep tight and conversational.
+
+3. Say It Like This (Conversation Sentence)
+One short quotation someone could actually say in a live conversation. 1–2 sentences max.
+Format as:
+You could say:
+"…"
+
+4. Short Metaphor (Memorable & Simple)
+One brief metaphor or analogy (2–3 sentences max). Vivid but simple.
+
+STYLE: No emojis. No AI disclaimers. No mention of internal structure. Clean formatting.
+Tier structure overrides tone if conflicts arise."""
+
+TIER_IN_DEPTH = """You are a Christian articulation assistant for the Preachly app.
+Your task is to generate an "In-Depth" response to a user-submitted objection or faith-based question.
+When responding to objections, explain the Christian perspective rather than correcting the questioner's position.
+Frame ideas positively instead of refuting opposing views.
+
+The response MUST follow this exact structure:
+
+IN-DEPTH RESPONSE
+
+1. Clear Starting Point
+2–4 sentences. Clear but warm answer. Establish emotional steadiness.
+Include one Scripture quote in full sentence form if appropriate.
+
+2. Expanding the Foundation
+Biblical and theological reasoning. Include 1–3 Scripture references (quote at least one in full).
+Explain key distinctions clearly. Keep sentences readable. No jargon. No sermon tone.
+
+3. What This Means Personally
+Apply theology to real life. Address emotional realities. Emphasize humility.
+Feel human and pastoral, not theoretical.
+
+4. How You Could Walk Someone Through It
+4–6 sentences. Natural language. No church jargon. Calm and thoughtful.
+Format as:
+If I were explaining it more fully, I might say:
+"…"
+
+5. Reflection Prompt (For Personal Practice)
+1–2 reflective questions the user can ask themselves to deepen understanding.
+
+STYLE: No emojis. No AI disclaimers. No mention of internal structure. Clean formatting.
+Tier structure overrides tone if conflicts arise."""
+
+TIER_FULL_FRAMEWORK = """You are an advanced Christian worldview articulation assistant for the Preachly app.
+Your task is to generate a "Full Framework" response to a user-submitted objection or faith-based question.
+When responding to objections, explain the Christian perspective rather than correcting the questioner's position.
+Frame ideas positively instead of refuting opposing views.
+
+The response MUST follow this exact structure:
+
+FULL FRAMEWORK
+
+1. Biblical Foundation
+Include 1–2 scripture passages directly and explain their meaning in context.
+Do not list verses without explanation. Present balanced biblical tension if applicable.
+
+2. Theological Coherence
+Explain how this issue fits within Creation, Fall, Redemption, Restoration.
+Clarify key theological distinctions. Emphasize grace-first framing. No denominational bias.
+
+3. Philosophical Coherence
+Demonstrate internal logical consistency within the Christian worldview.
+Connect to real human questions about meaning, dignity, identity, morality.
+Do not attack opposing views — highlight worldview consistency.
+
+4. Cultural Engagement Layer
+Acknowledge emotional or cultural weight behind the question.
+Offer a short conversation-ready framing sentence someone could say.
+Keep tone calm, grounded, non-reactive.
+
+5. Strategic Summary
+Four concise bullet points:
+Biblically —
+Theologically —
+Philosophically —
+Culturally —
+
+STYLE: No emojis. No AI disclaimers. No mention of internal structure. Clean formatting.
+Tier structure overrides tone if conflicts arise."""
+
+# ─── Clarification Prompts ───────────────────────────────────────────────────────
+
+CLARIFICATION_YES_PROMPT = """If the user selects Need More Clarity (YES), provide a focused expansion that deepens the explanation without repeating the original response.
+
+Rules:
+- Do NOT restate the previous answer.
+- Do NOT summarize the earlier response.
+- Assume the user has already read it.
+- Move the explanation one step deeper.
+
+Structure:
+1. Clarify the Key Idea — explain core concept more clearly in 2–3 sentences.
+2. Add a New Insight — one new perspective or distinction not mentioned before.
+3. Scriptural Reinforcement — 1 additional relevant scripture reference.
+4. Practical Understanding — why this matters in real life or conversations.
+
+Maximum 120 words. Short clear sentences. No repeating phrases from original.
+No sermon tone. No vague language. Return only the clarification response."""
+
+CLARIFICATION_NO_PROMPT = """If the user selects No for "Need More Clarity," generate a thoughtful follow-up question the user could ask in conversation.
+
+The purpose is to keep the conversation relational and curious rather than argumentative.
+
+Format exactly as:
+You could ask:
+"…"
+
+Guidelines:
+- Feel natural in spoken conversation
+- Invite the other person to share their perspective
+- Avoid sounding like a debate tactic
+- Avoid interrogative or confrontational tone
+- Calm, curious, thoughtful
+- No church jargon
+- Under 40 words total
+
+Return only the follow-up question in the format above."""
+
+# ─── Tone Blocks ─────────────────────────────────────────────────────────────────
+
+TONE_BLOCKS = {
+    "Clear and Hopeful": {
+        "description": "Simple, direct, and steady. Communicates truth clearly while emphasizing God's love and faithfulness.",
+        "guardrails": ["Short sentences", "Minimal imagery", "Calm cadence", "No emotional intensity spikes"]
+    },
+    "Dynamic and Powerful": {
+        "description": "Bold, vivid, and image-driven. Uses strong verbs and compelling contrasts. Stirs conviction without aggression.",
+        "guardrails": ["Strong verbs (redeems, breaks, restores)", "Controlled vivid imagery", "Rhythmic phrasing", "Avoid softness"]
+    },
+    "Practical and Everyday": {
+        "description": "Down-to-earth and solution-oriented. Focuses on how faith plays out in real decisions and habits.",
+        "guardrails": ["Real-life examples", "Action steps implied", "Minimal theological abstraction", "Everyday language"]
+    },
+    "Encouraging and Purposeful": {
+        "description": "Affirming and growth-focused. Emphasizes development, refinement, and becoming. Frames challenges as shaping moments.",
+        "guardrails": ["Words like growth, shaping, forming", "Gentle optimism", "Avoid dramatic language", "Avoid hype"]
+    },
+    "Uplifting and Optimistic": {
+        "description": "Light-filled and joy-centered. Emphasizes hope, renewal, and God's goodness prevailing over darkness.",
+        "guardrails": ["Hope-forward phrasing", "Emphasis on joy and restoration", "Avoid heavy theological depth", "Avoid emotional intensity"]
+    },
+    "Scholarly and Rational": {
+        "description": "Structured, reasoned, and historically grounded. Appeals to logic, coherence, and theological continuity.",
+        "guardrails": ["Structured reasoning", "Use of distinctions", "Historical or doctrinal references", "Minimal emotional language"]
+    },
+    "Warm and Relatable": {
+        "description": "Conversational, compassionate, and emotionally aware. Acknowledge struggle before offering clarity.",
+        "guardrails": ["Validate emotion first", "Gentle phrasing", "Natural speech cadence", "Avoid intensity or hype"]
+    },
+    "Passionate and Empowering": {
+        "description": "Confident and action-oriented. Emphasizes spiritual authority, identity in Christ, and bold forward movement.",
+        "guardrails": ["Direct calls to courage", "Identity language ('You are...')", "Forward momentum", "Avoid softness"]
+    },
+}
+
+# ─── Tier Config ─────────────────────────────────────────────────────────────────
+
+TIER_CONFIG = {
+    "Conversation Ready": {
+        "prompt": TIER_CONVERSATION_READY,
+        "max_tokens": 600,
+        "temperature": 0.55,
+    },
+    "In-Depth Explanation": {
+        "prompt": TIER_IN_DEPTH,
+        "max_tokens": 1000,
+        "temperature": 0.6,
+    },
+    "Full Framework": {
+        "prompt": TIER_FULL_FRAMEWORK,
+        "max_tokens": 1350,
+        "temperature": 0.5,
+    },
+}
+
+
+def build_tone_block(tone_name: str, tier_name: str) -> str:
+    """Build the tone injection system message"""
+    tone = TONE_BLOCKS.get(tone_name, TONE_BLOCKS["Clear and Hopeful"])
+    guardrails = "\n".join([f"- {g}" for g in tone["guardrails"]])
+
+    # Tone intensity based on tier
+    intensity_map = {
+        "Conversation Ready": "60%",
+        "In-Depth Explanation": "80%",
+        "Full Framework": "50%",
+    }
+    intensity = intensity_map.get(tier_name, "70%")
+
+    return f"""USER-SELECTED TONE DIRECTIVE:
+
+Tone Name: {tone_name}
+
+Tone Description:
+{tone["description"]}
+
+Tone Behavioral Constraints:
+{guardrails}
+
+Tone Application Rules:
+- Maintain this tone consistently.
+- Do not override structural requirements of the selected tier.
+- If tone conflicts with clarity, prioritize clarity.
+- Avoid blending with other tones.
+- Match tone subtly, not theatrically.
+- Tone intensity should be moderated to approximately {intensity} to fit the selected tier depth."""
+
+
+# ─── Main AI Service ──────────────────────────────────────────────────────────────
+
 class AIChatCore:
-    """Bible-focused AI service with spiritual context awareness"""
+    """Preachly AI service — GPT-5 with modular Tier + Tone architecture"""
 
-    def __init__(self, model: str = "gpt-3.5-turbo", temperature: float = 0.7):
+    MODEL = "gpt-4.1"  
+
+    def __init__(self):
         self.client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = model
-        self.temperature = temperature
-        self.max_tokens = 1000
 
-    def generate_bible_response(
-        self,
-        conversation_history: List[Dict],
-        user,  # Django User instance
-        user_context: Dict = None,
-    ) -> Dict:
-        """Generate Bible-focused AI response using spiritual context"""
-
-        start_time = time.time()
-
-        try:
-            # Build Bible-focused system prompt
-            system_prompt = self._build_bible_system_prompt(user_context)
-
-            # Prepare messages for AI
-            messages = [{"role": "system", "content": system_prompt}]
-            messages.extend(conversation_history)
-
-            # Adjust temperature based on user's tone preference
-            temperature = self._get_contextual_temperature(user_context)
-
-            # Generate response
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=self.max_tokens,
-            )
-
-            response_time = time.time() - start_time
-            content = response.choices[0].message.content
-
-            # Extract Bible references from response
-            bible_references = self._extract_bible_references(content)
-
-            # Build conversation context for future reference
-            conversation_context = self._build_conversation_context(
-                user_context, content, bible_references
-            )
-
-            return {
-                "content": content,
-                "tokens_used": response.usage.total_tokens,
-                "response_time": response_time,
-                "model_used": self.model,
-                "bible_references": bible_references,
-                "conversation_context": conversation_context,
-                "success": True,
-            }
-
-        except Exception as e:
-            return {
-                "content": "I apologize, but I'm having trouble responding right now. Please try again, and I'll do my best to help you with your Bible study.",
-                "tokens_used": 0,
-                "response_time": time.time() - start_time,
-                "model_used": self.model,
-                "bible_references": [],
-                "success": False,
-                "error": str(e),
-            }
+    def _call_api(self, messages: List[Dict], max_tokens: int, temperature: float = None) -> Dict:
+        kwargs = {
+            "model": self.MODEL,
+            "messages": messages,
+            "max_tokens": max_tokens,  # gpt-4.1 uses max_tokens normally
+        }
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        return self.client.chat.completions.create(**kwargs)
 
     def generate_preachly_response(
         self,
         objection: str,
         tone: str = "Clear and Hopeful",
         depth: str = "In-Depth Explanation",
-        user_context: Dict = None
+        user_context: Dict = None,
     ) -> Dict:
-        """Generate Preachly structured response"""
-        
+        """
+        Generate Preachly structured response.
+        Uses two separate system messages: Tier + Tone (modular architecture).
+        """
         start_time = time.time()
-        
+
         try:
-            # Build Preachly system prompt
-            system_prompt = self._build_preachly_system_prompt(objection, tone, depth, user_context)
-            
-            # Adjust temperature based on tone
-            temperature = self._get_tone_temperature(tone)
-            
-            # Generate main response
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": objection}
-                ],
-                temperature=temperature,
-                max_tokens=1500,
-            )
-            
+            tier_config = TIER_CONFIG.get(depth, TIER_CONFIG["In-Depth Explanation"])
+            tier_prompt = tier_config["prompt"]
+            max_tokens = tier_config["max_tokens"]
+            temperature = tier_config["temperature"]
+            tone_block = build_tone_block(tone, depth)
+
+            messages = [
+                {"role": "system", "content": tier_prompt},
+                {"role": "system", "content": tone_block},
+                {"role": "user", "content": objection},
+            ]
+
+            response = self._call_api(messages, max_tokens, temperature)
             content = response.choices[0].message.content
-            
-            # Generate key points summary
-            summary = self._generate_key_points_summary(content, tone)
-            
+            print(f"DEBUG content extracted: {content!r}")
+
             return {
                 "content": content,
-                "summary": summary,
                 "tokens_used": response.usage.total_tokens,
                 "response_time": time.time() - start_time,
+                "model_used": self.MODEL,
                 "tone": tone,
                 "depth": depth,
                 "success": True,
             }
-            
+
         except Exception as e:
             return {
                 "content": self._get_biblical_error_message(),
-                "summary": [],
                 "success": False,
-                "error": str(e)
+                "error": str(e),
+                "tone": tone,
+                "depth": depth,
             }
 
-    def _get_tone_temperature(self, tone: str) -> float:
-        """Get AI temperature based on tone"""
-        tone_temps = {
-            "Scholarly and Rational": 0.3,
-            "Clear and Hopeful": 0.5,
-            "Practical and Everyday": 0.6,
-            "Dynamic and Powerful": 0.8,
-            "Passionate and Empowering": 0.8,
-            "Warm and Relatable": 0.7,
-            "Encouraging and Purposeful": 0.6,
-            "Uplifting and Optimistic": 0.7,
-        }
-        return tone_temps.get(tone, 0.7)
+    def generate_clarification_yes(
+        self,
+        original_response: str,
+        tone: str = "Clear and Hopeful",
+    ) -> Dict:
+        """
+        Handle 'Need More Clarity → YES'.
+        Deepens explanation without restating.
+        Max 120 words.
+        """
+        start_time = time.time()
 
-    def _generate_key_points_summary(self, content: str, tone: str) -> List[str]:
-        """Generate 3-6 key points summary"""
         try:
-            summary_prompt = f"""Provide a numbered summary of 3 to 6 key points from this response. Use simple language and match the {tone} tone style:
+            tone_block = build_tone_block(tone, "Conversation Ready")
 
-            {content}"""
-            
-            response = self.client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": summary_prompt}],
-                temperature=0.3,
-                max_tokens=200,
-            )
-            
-            summary_text = response.choices[0].message.content
-            # Extract numbered points
-            points = []
-            for line in summary_text.split('\n'):
-                if line.strip() and (line.strip()[0].isdigit() or line.strip().startswith('-')):
-                    points.append(line.strip())
-            
-            return points[:6]
-            
-        except:
-            return ["Key insights provided in the response above"]
+            messages = [
+                {"role": "system", "content": CLARIFICATION_YES_PROMPT},
+                {"role": "system", "content": tone_block},
+                {"role": "user", "content": f"Original response:\n{original_response}"},
+            ]
 
-    def _get_biblical_error_message(self) -> str:
-        """Get random biblical error message"""
-        errors = [
-            "Seems I'm having a 'parting of the Red Sea' moment—stuck in the middle! Give it another go.",
-            "Looks like I'm having a Jonah moment—briefly off course! Try again, and we'll get back on mission.",
-            "I've hit a Jericho wall, but don't worry—it's coming down! Give it another try.",
-            "Even Paul had shipwrecks—this is mine. Let's try again and stay the course.",
-            "I've run into a Goliath-sized glitch… but I've got my slingshot ready. Try again!",
-        ]
-        import random
-        return random.choice(errors)
-        
-    def _build_preachly_system_prompt(self, objection: str, tone: str, depth: str, user_context: Dict) -> str:
-        """Build Preachly structured system prompt"""
-        
-        # Add denomination context if available
+            response = self._call_api(messages, max_tokens=3000, temperature=0.5)
+            content = response.choices[0].message.content
+
+            return {
+                "content": content,
+                "tokens_used": response.usage.total_tokens,
+                "response_time": time.time() - start_time,
+                "success": True,
+                "type": "clarification_yes",
+            }
+
+        except Exception as e:
+            return {
+                "content": "Let me try to clarify further. The core idea here is that God's grace doesn't depend on our performance — it's freely given.",
+                "success": False,
+                "error": str(e),
+            }
+
+    def generate_clarification_no(
+        self,
+        original_response: str,
+        tone: str = "Clear and Hopeful",
+    ) -> Dict:
+        """
+        Handle 'Need More Clarity → NO'.
+        Generates a follow-up question the user can ask in conversation.
+        Always ends with static UI text: '— or —\nStart a new chat'
+        """
+        start_time = time.time()
+
+        try:
+            tone_block = build_tone_block(tone, "Conversation Ready")
+
+            messages = [
+                {"role": "system", "content": CLARIFICATION_NO_PROMPT},
+                {"role": "system", "content": tone_block},
+                {"role": "user", "content": f"Original response topic:\n{original_response[:200]}"},
+            ]
+
+            response = self._call_api(messages, max_tokens=2000, temperature=0.6)
+            content = response.choices[0].message.content
+
+            # NOTE: '— or —\nStart a new chat' is appended at UI level, not here.
+
+            return {
+                "content": content,
+                "tokens_used": response.usage.total_tokens,
+                "response_time": time.time() - start_time,
+                "success": True,
+                "type": "clarification_no",
+                "show_new_chat_option": True,  # Frontend uses this to render the static text
+            }
+
+        except Exception as e:
+            return {
+                "content": 'You could ask:\n"What made you start thinking about this topic?"',
+                "success": False,
+                "error": str(e),
+                "show_new_chat_option": True,
+            }
+
+    def generate_bible_response(
+        self,
+        conversation_history: List[Dict],
+        user,
+        user_context: Dict = None,
+    ) -> Dict:
+        """Generate Bible-focused AI response (used by WebSocket consumer)"""
+        start_time = time.time()
+
+        try:
+            system_prompt = self._build_bible_system_prompt(user_context)
+            messages = [{"role": "system", "content": system_prompt}]
+            messages.extend(conversation_history)
+
+            response = self._call_api(messages, max_tokens=1000, temperature=0.7)
+            content = response.choices[0].message.content
+            bible_references = self._extract_bible_references(content)
+
+            return {
+                "content": content,
+                "tokens_used": response.usage.total_tokens,
+                "response_time": time.time() - start_time,
+                "model_used": self.MODEL,
+                "bible_references": bible_references,
+                "success": True,
+            }
+
+        except Exception as e:
+            return {
+                "content": "I'm having trouble responding right now. Please try again.",
+                "tokens_used": 0,
+                "response_time": time.time() - start_time,
+                "model_used": self.MODEL,
+                "bible_references": [],
+                "success": False,
+                "error": str(e),
+            }
+
+    def _build_bible_system_prompt(self, user_context: Dict = None) -> str:
         denomination = ""
+        tone = "Clear and Hopeful"
+        bible_version = "NIV"
+
         if user_context:
             denomination = user_context.get('denomination', '')
-        
+            tone_pref = user_context.get('tone_preference', {})
+            if isinstance(tone_pref, dict):
+                tone = tone_pref.get('name', tone)
+            bv = user_context.get('bible_version', {})
+            if isinstance(bv, dict):
+                bible_version = bv.get('title', bible_version)
+
         denomination_line = f"\nUser's denomination: {denomination}" if denomination else ""
 
-        base_prompt = f"""You are Preachly, an advanced assistant providing scripture-based, thoughtful rebuttals to common objections about Christianity. Your responses must be biblically rooted, engaging, and aligned with the selected tone.
-
-    Tone to use: {tone}
-    Depth level: {depth}{denomination_line}
-
-    Tone Guidelines:
-    - Clear and Hopeful: Simple, direct, and encouraging
-    - Dynamic and Powerful: Emotive, bold, with vivid imagery
-    - Practical and Everyday: Grounded, solution-oriented
-    - Encouraging and Purposeful: Focus on meaning and growth
-    - Uplifting and Optimistic: Highlight hope and joy
-    - Scholarly and Rational: Logic, reason, well-structured arguments
-    - Warm and Relatable: Conversational, empathetic, emotionally resonant
-    - Passionate and Empowering: Spiritual growth, perseverance, strength
-
-    You MUST write all three sections below in full. Do not skip any section.
-
-    **Scriptural Rebuttal**
-    Quote a relevant Bible verse and explain in 2-3 sentences how it directly addresses the objection. Match the {tone} tone.
-
-    **Anecdote / Metaphor**
-    Write a vivid, relatable story or metaphor (3-5 sentences) that illustrates the point for someone in everyday life. Match the {tone} tone.
-
-    **Explanation**
-    Provide a thorough theological explanation appropriate for "{depth}" depth (at least 3-4 sentences). Connect back to the scripture and anecdote. Match the {tone} tone throughout."""
-
-        return base_prompt
-
-    def _get_contextual_temperature(self, user_context: Dict) -> float:
-        """Adjust AI temperature based on user's spiritual context"""
-        if not user_context:
-            return self.temperature
-
-        # More conservative for serious theological discussions
-        tone_preference = user_context.get('tone_preference', {})
-        tone_name = tone_preference.get('name', '').lower()
-        
-        # Adjust based on tone preference
-        if 'scholarly' in tone_name or 'formal' in tone_name:
-            return 0.5  # More conservative and consistent
-        elif 'casual' in tone_name or 'friendly' in tone_name:
-            return 0.8  # More creative and conversational
-        
-        return self.temperature
+        return f"""You are Preachly, a Christian Bible study assistant.
+Provide scripture-based, thoughtful answers to faith questions.
+Tone: {tone}
+Bible version preference: {bible_version}{denomination_line}
+Be encouraging, biblically grounded, and conversational.
+Do not use emojis. Do not mention being an AI."""
 
     def _extract_bible_references(self, content: str) -> List[Dict]:
-        """Extract Bible references from AI response"""
-        # Common Bible reference patterns
         patterns = [
-            r'\b\d*\s*([A-Z][a-z]+\.?)\s+(\d+):(\d+(?:-\d+)?)\b',  # John 3:16 or 1 John 3:16
-            r'\b([A-Z][a-z]+\.?)\s+(\d+):(\d+(?:-\d+)?)\b',        # John 3:16
-            r'\b\d*\s*([A-Z][a-z]+\.?)\s+(\d+)\b',                 # John 3 (whole chapter)
+            r'\b\d*\s*([A-Z][a-z]+\.?)\s+(\d+):(\d+(?:-\d+)?)\b',
+            r'\b([A-Z][a-z]+\.?)\s+(\d+):(\d+(?:-\d+)?)\b',
         ]
-        
         references = []
-        
         for pattern in patterns:
             matches = re.findall(pattern, content)
             for match in matches:
-                if len(match) == 3:  # Book, Chapter, Verse
+                if len(match) == 3:
                     book, chapter, verse = match
                     references.append({
                         "book": book,
@@ -256,213 +464,43 @@ class AIChatCore:
                         "verse": verse,
                         "reference": f"{book} {chapter}:{verse}"
                     })
-                elif len(match) == 2:  # Book, Chapter (whole chapter)
-                    book, chapter = match
-                    references.append({
-                        "book": book,
-                        "chapter": int(chapter),
-                        "verse": None,
-                        "reference": f"{book} {chapter}"
-                    })
-        
-        # Remove duplicates
-        unique_references = []
+        # Deduplicate
         seen = set()
+        unique = []
         for ref in references:
-            ref_key = (ref['book'], ref['chapter'], ref['verse'])
-            if ref_key not in seen:
-                seen.add(ref_key)
-                unique_references.append(ref)
-        
-        return unique_references
+            key = (ref['book'], ref['chapter'], ref['verse'])
+            if key not in seen:
+                seen.add(key)
+                unique.append(ref)
+        return unique
 
-    def _build_conversation_context(
-        self, user_context: Dict, ai_response: str, bible_references: List[Dict]
-    ) -> Dict:
-        """Build context for future conversations"""
-        
-        context = {
-            'timestamp': time.time(),
-            'response_length': len(ai_response),
-            'bible_references_count': len(bible_references),
-            'topics_discussed': [],  # Could be enhanced with NLP
-        }
-        
-        # Add Bible books mentioned
-        if bible_references:
-            context['bible_books_mentioned'] = list(set([ref['book'] for ref in bible_references]))
-        
-        # Extract potential themes/topics from the response
-        context['potential_themes'] = self._extract_themes(ai_response)
-        
-        # Add user's spiritual state context
-        if user_context:
-            context['user_spiritual_state'] = {
-                'journey_reason': user_context.get('journey_reason', ''),
-                'faith_goal': user_context.get('faith_goal', ''),
-                'bible_familiarity': user_context.get('bible_familiarity', {}).get('label', ''),
-                'denomination': user_context.get('denomination', ''),
-            }
-        
-        # Add response quality metrics
-        context['response_metrics'] = {
-            'has_bible_references': len(bible_references) > 0,
-            'reference_density': len(bible_references) / max(len(ai_response.split()), 1),
-            'estimated_reading_time': len(ai_response.split()) / 200,  # words per minute
-        }
-        
-        return context
-
-    def _extract_themes(self, content: str) -> List[str]:
-        """Extract potential biblical themes from response content"""
-        # Common biblical themes/topics
-        themes = [
-            'faith', 'love', 'hope', 'forgiveness', 'salvation', 'grace', 'mercy',
-            'prayer', 'worship', 'discipleship', 'fellowship', 'ministry', 'service',
-            'scripture', 'bible study', 'theology', 'doctrine', 'prophecy', 'mission',
-            'evangelism', 'baptism', 'communion', 'church', 'christian living',
-            'spiritual growth', 'temptation', 'sin', 'redemption', 'eternal life',
-            'heaven', 'hell', 'angels', 'demons', 'spiritual warfare', 'wisdom',
-            'guidance', 'healing', 'miracles', 'testimony', 'witness', 'obedience',
-            'trust', 'patience', 'humility', 'joy', 'peace', 'thanksgiving',
-            'repentance', 'confession', 'holiness', 'righteousness', 'justice'
+    def _get_biblical_error_message(self) -> str:
+        import random
+        errors = [
+            "Seems I'm having a 'parting of the Red Sea' moment—stuck in the middle! Give it another go.",
+            "Looks like I'm having a Jonah moment—briefly off course! Try again, and we'll get back on mission.",
+            "I've hit a Jericho wall, but don't worry—it's coming down! Give it another try.",
+            "Even Paul had shipwrecks—this is mine. Let's try again and stay the course.",
+            "I've run into a Goliath-sized glitch… but I've got my slingshot ready. Try again!",
         ]
-        
-        content_lower = content.lower()
-        found_themes = []
-        
-        for theme in themes:
-            if theme in content_lower:
-                found_themes.append(theme)
-        
-        return found_themes[:10]  # Limit to top 10 themes
+        return random.choice(errors)
 
-    def generate_conversation_summary(self, conversation_history: List[Dict]) -> Dict:
-        """Generate a summary of the conversation for context"""
-        if not conversation_history:
-            return {}
-        
+    def get_ai_health_status(self) -> Dict:
         try:
-            # Create a summary prompt
-            summary_prompt = """Please provide a brief summary of this Bible study conversation, including:
-1. Main topics discussed
-2. Key Bible passages referenced
-3. User's spiritual questions or concerns
-4. Suggested next steps for study
-
-Keep the summary concise but informative."""
-            
-            # Prepare conversation text
-            conversation_text = ""
-            for msg in conversation_history[-10:]:  # Last 10 messages
-                role = "User" if msg.get("role") == "user" else "Assistant"
-                conversation_text += f"{role}: {msg.get('content', '')}\n\n"
-            
-            messages = [
-                {"role": "system", "content": summary_prompt},
-                {"role": "user", "content": f"Conversation to summarize:\n{conversation_text}"}
-            ]
-            
-            response = self.client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=messages,
-                temperature=0.3,
-                max_tokens=300,
+            response = self._call_api(
+                messages=[{"role": "user", "content": "Hello"}],
+                max_tokens=10
             )
-            
-            summary = response.choices[0].message.content
-            
             return {
-                "summary": summary,
-                "message_count": len(conversation_history),
+                "status": "healthy",
+                "model": self.MODEL,
                 "tokens_used": response.usage.total_tokens,
                 "success": True,
             }
-            
-        except Exception as e:
-            return {
-                "summary": "Unable to generate conversation summary",
-                "error": str(e),
-                "success": False,
-            }
-            
-
-    def suggest_follow_up_topics(self, conversation_context: Dict, user_context: Dict) -> List[str]:
-        """Suggest follow-up topics based on conversation and user context"""
-        suggestions = []
-        
-        # Based on Bible books mentioned
-        bible_books = conversation_context.get('bible_books_mentioned', [])
-        if bible_books:
-            suggestions.append(f"Continue exploring {bible_books[0]} with related passages")
-        
-        # Based on themes discussed
-        themes = conversation_context.get('potential_themes', [])
-        if themes:
-            primary_theme = themes[0]
-            suggestions.append(f"Deepen your understanding of {primary_theme} in Scripture")
-        
-        # Based on user's faith goal
-        if user_context:
-            faith_goal = user_context.get('faith_goal', '')
-            if faith_goal:
-                suggestions.append(f"Continue working toward: {faith_goal}")
-        
-        # Based on user's journey reason
-        journey_reason = user_context.get('journey_reason', '')
-        if journey_reason and 'doubt' in journey_reason.lower():
-            suggestions.append("Explore passages about faith and overcoming doubt")
-        elif journey_reason and 'growth' in journey_reason.lower():
-            suggestions.append("Study spiritual disciplines for continued growth")
-        
-        # Default suggestions
-        if not suggestions:
-            suggestions = [
-                "Begin a daily Bible reading plan",
-                "Study the Gospel of John for foundational understanding",
-                "Explore the Psalms for prayer and worship",
-                "Learn about Christian character in the New Testament"
-            ]
-        
-        return suggestions[:5]  # Limit to 5 suggestions
-
-    def validate_bible_reference(self, reference: str) -> bool:
-        """Basic validation of Bible reference format"""
-        # Simple validation patterns
-        patterns = [
-            r'^\d*\s*[A-Z][a-z]+\.?\s+\d+:\d+(-\d+)?$',  # John 3:16 or 1 John 3:16-17
-            r'^\d*\s*[A-Z][a-z]+\.?\s+\d+$',             # John 3
-        ]
-        
-        for pattern in patterns:
-            if re.match(pattern, reference.strip()):
-                return True
-        
-        return False
-
-    def get_ai_health_status(self) -> Dict:
-        """Get AI service health status"""
-        try:
-            # Simple health check with minimal token usage
-            test_response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": "Hello"}],
-                temperature=0.1,
-                max_tokens=10,
-            )
-            
-            return {
-                "status": "healthy",
-                "model": self.model,
-                "response_time": 0.1,  # Approximate
-                "tokens_used": test_response.usage.total_tokens,
-                "success": True,
-            }
-            
         except Exception as e:
             return {
                 "status": "unhealthy",
                 "error": str(e),
-                "model": self.model,
+                "model": self.MODEL,
                 "success": False,
             }
