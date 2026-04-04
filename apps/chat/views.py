@@ -589,9 +589,16 @@ class ExportChatHistoryView(BaseResponseMixin, APIView):
             }
             
             for session in sessions:
+                            # Get first user message as preview
+                first_user_msg = session.messages.filter(is_user=True).order_by('created_at').first()
+                preview = ""
+                if first_user_msg and first_user_msg.content:
+                    preview = first_user_msg.content[:100] + "..." if len(first_user_msg.content) > 100 else first_user_msg.content
+
                 session_data = {
                     'id': str(session.id),
                     'title': session.title,
+                    'preview': preview,
                     'created_at': session.created_at.isoformat(),
                     'updated_at': session.updated_at.isoformat(),
                     'is_saved': session.is_saved,
