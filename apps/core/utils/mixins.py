@@ -144,7 +144,7 @@ class BaseResponseMixin:
         # Method not allowed
         elif isinstance(exc, MethodNotAllowed):
             return self.error_response(
-                message=f"Method '{exc.method}' not allowed.",
+                message=str(exc),  # Use the exception's message which contains the method info
                 error_code="METHOD_NOT_ALLOWED",
                 status_code=status.HTTP_405_METHOD_NOT_ALLOWED,
             )

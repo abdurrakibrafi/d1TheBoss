@@ -655,7 +655,6 @@ class CheckAndAwardBadgesAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # Fire the celery task
         check_and_award_badges_task.delay(request.user.id)
         return self.success_response({
             'message': 'Badge check triggered'
