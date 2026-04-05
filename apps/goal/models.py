@@ -59,76 +59,74 @@ class UserGoal(models.Model):
         
     @classmethod
     def get_or_create_weekly_goal(cls, user):
-        """Get or create this week's goal based on user's goal cycle"""
+        """Get or create this week's goal based on the user's current preference."""
         from .utils import get_user_primary_goal_type
         
         today = timezone.now().date()
         
-        # Try to get user's onboarding date or use account creation date
+        # Calculate week start based on user's onboarding cycle, not Monday.
         try:
-            from apps.onboarding.models import UserGoalPreference
             onboarding_date = user.date_joined.date()
-            # Calculate week start based on user's cycle, not Monday
             days_since_start = (today - onboarding_date).days
             week_number = days_since_start // 7
             week_start = onboarding_date + timedelta(days=week_number * 7)
-        except:
-            # Fallback to Monday-based if calculation fails
+        except Exception:
             week_start = today - timedelta(days=today.weekday())
         
-        # Check if goal already exists for this week
-        existing_goal = cls.objects.filter(user=user, week_start=week_start).first()
+        primary_goal_type = get_user_primary_goal_type(user)
+        existing_goal = cls.objects.filter(
+            user=user,
+            week_start=week_start,
+            goal_type=primary_goal_type
+        ).first()
         
         if existing_goal:
             return existing_goal, False
         
-        # Create new goal
-        primary_goal_type = get_user_primary_goal_type(user)
         target_count = 25 if primary_goal_type == 'scripture' else 10
-        
         goal = cls.objects.create(
             user=user,
             goal_type=primary_goal_type,
             week_start=week_start,
             target_count=target_count
         )
-        
         return goal, True
     
     @classmethod
     def update_goal_for_preference_change(cls, user):
-        """Update current week's goal when user changes their preferences"""
+        """Ensure the current week's active goal matches the current preference without losing previous counts."""
         from .utils import get_user_primary_goal_type
         
         today = timezone.now().date()
         
-        # Calculate week start (use same logic as get_or_create_weekly_goal)
         try:
             onboarding_date = user.date_joined.date()
             days_since_start = (today - onboarding_date).days
             week_number = days_since_start // 7
             week_start = onboarding_date + timedelta(days=week_number * 7)
-        except:
+        except Exception:
             week_start = today - timedelta(days=today.weekday())
         
-        current_goal = cls.objects.filter(user=user, week_start=week_start).first()
+        new_goal_type = get_user_primary_goal_type(user)
+        active_goal = cls.objects.filter(
+            user=user,
+            week_start=week_start,
+            goal_type=new_goal_type
+        ).first()
         
-        if current_goal:
-            # ADD THIS LINE - Get the new goal type
-            new_goal_type = get_user_primary_goal_type(user)
-            
-            # ALWAYS update if goal type changed
-            if current_goal.goal_type != new_goal_type:
-                current_goal.goal_type = new_goal_type
-                current_goal.target_count = 25 if new_goal_type == 'scripture' else 10
-                # Reset progress when goal type changes
-                current_goal.current_count = 0
-                current_goal.completed = False
-                current_goal.save()
-                
-                return current_goal, True
+        if active_goal:
+            active_goal.target_count = 25 if new_goal_type == 'scripture' else 10
+            active_goal.save(update_fields=['target_count'])
+            return active_goal, False
         
-        return current_goal, False
+        target_count = 25 if new_goal_type == 'scripture' else 10
+        new_goal = cls.objects.create(
+            user=user,
+            goal_type=new_goal_type,
+            week_start=week_start,
+            target_count=target_count
+        )
+        return new_goal, True
             
     @classmethod
     def get_current_week_goals(cls, user):

@@ -140,7 +140,20 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
             if saved_tone:
                 tone = saved_tone
- 
+
+            # ADD THIS — pull depth from bible_familiarity
+            saved_familiarity = (
+                user_context.get("bible_familiarity", {}).get("title")
+                if user_context else None
+            )
+            familiarity_to_depth = {
+                "Conversation Ready": "Conversation Ready",
+                "In-Depth": "In-Depth Explanation",
+                "Full Framework": "Full Framework",
+            }
+            if saved_familiarity and saved_familiarity in familiarity_to_depth:
+                depth = familiarity_to_depth[saved_familiarity]
+            
             # Handle yes_no BEFORE sending typing indicator
             # Clarification handlers control their own typing indicator
             if message_type == "yes_no":

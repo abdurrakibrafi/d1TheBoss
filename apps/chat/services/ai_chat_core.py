@@ -379,6 +379,8 @@ class AIChatCore:
             import re
             content = re.sub(r'You could ask:\s+', 'You could ask: ', content)
 
+            print(f"DEBUG clarification_no content🎴 extracted : {content!r} holds original🎴 response topic: {original_response[:200]!r}") 
+
             return {
                 "content": content,
                 "tokens_used": response.usage.total_tokens,
