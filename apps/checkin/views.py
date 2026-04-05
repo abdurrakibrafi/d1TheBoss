@@ -19,6 +19,7 @@ from apps.checkin.models import (
 from apps.checkin.serializers import (
     BadgeTemplateSerializer,
     DailyCheckinSerializer,
+    UserAppBadgeSerializer,
     UserStreakSerializer,
     UserBadgeSerializer,
     WeeklyCheckinQuestionSerializer,
@@ -642,14 +643,20 @@ class UserAppBadgesListAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from apps.checkin.serializers import UserAppBadgeSerializer
         user = request.user
         user_badges = UserAppBadge.objects.filter(user=user).select_related('badge_template')
         latest_badge = user_badges.first() if user_badges.exists() else None
 
         return self.success_response({
-            'latest_badge': UserAppBadgeSerializer(latest_badge).data if latest_badge else None,
-            'badges': UserAppBadgeSerializer(user_badges, many=True).data,
+            'latest_badge': UserAppBadgeSerializer(
+                latest_badge, 
+                context={'request': request}  # ADD THIS
+            ).data if latest_badge else None,
+            'badges': UserAppBadgeSerializer(
+                user_badges, 
+                many=True,
+                context={'request': request}  # ADD THIS
+            ).data,
             'total_earned': user_badges.count()
         }, status=status.HTTP_200_OK)
 
@@ -664,17 +671,16 @@ class CheckAndAwardBadgesAPIView(BaseResponseMixin, APIView):
         }, status=status.HTTP_200_OK)
 
 
+
 class AllBadgeTemplatesAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         templates = BadgeTemplate.objects.all()
-        # Pass request in context for absolute URL
-        serializer = BadgeTemplateSerializer(
-            templates, 
-            many=True,
-            context={'request': request}  # ADD THIS
-        )
         return self.success_response({
-            'badge_templates': serializer.data
+            'badge_templates': BadgeTemplateSerializer(
+                templates, 
+                many=True,
+                context={'request': request}  # ADD THIS
+            ).data
         }, status=status.HTTP_200_OK)
