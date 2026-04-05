@@ -17,6 +17,7 @@ from apps.checkin.models import (
     get_current_week_boundaries,
 )
 from apps.checkin.serializers import (
+    BadgeTemplateSerializer,
     DailyCheckinSerializer,
     UserStreakSerializer,
     UserBadgeSerializer,
@@ -143,31 +144,29 @@ class DailyCheckinAPIView(BaseResponseMixin, APIView):
         }, status=status.HTTP_201_CREATED)
 
     def _ensure_current_week_exists(self, user):
-        """
-        Safety net: if no UserWeeklyCheckin exists for current week, create one.
-        This handles edge cases where Celery task hasn't run yet.
-        """
         week_start, week_end = get_current_week_boundaries()
-
-        existing = UserWeeklyCheckin.objects.filter(
+        
+        # Fix any existing null dates first
+        UserWeeklyCheckin.objects.filter(
+            user=user, 
+            week_start__isnull=True
+        ).update(week_start=week_start, week_end=week_end)
+        
+        # Now check — if ANY available week exists, stop
+        if UserWeeklyCheckin.objects.filter(user=user, status='available').exists():
+            return
+        
+        # No available week at all — create one
+        existing_count = UserWeeklyCheckin.objects.filter(user=user).count()
+        UserWeeklyCheckin.objects.create(
             user=user,
-            week_start=week_start
-        ).first()
-
-        if not existing:
-            existing_count = UserWeeklyCheckin.objects.filter(user=user).count()
-            week_number = existing_count + 1
-
-            UserWeeklyCheckin.objects.create(
-                user=user,
-                week_number=week_number,
-                week_start=week_start,
-                week_end=week_end,
-                status='available',
-                is_available=True,
-                is_completed=False,
-            )
-
+            week_number=existing_count + 1,
+            week_start=week_start,
+            week_end=week_end,
+            status='available',
+            is_available=True,
+            is_completed=False,
+        )
 
 # ─── Calendar ───────────────────────────────────────────────────────────────────
 
@@ -409,8 +408,12 @@ class WeeklyCheckinSubmitAPIView(BaseResponseMixin, APIView):
             weekly_checkin.completed_at = timezone.now()
             weekly_checkin.save()
 
-            # Fire badge check task asynchronously
-            check_and_award_badges_task.delay(user.id)
+            # Force refresh from DB to confirm save
+            weekly_checkin.refresh_from_db()
+
+            # Run badge check synchronously (not async) to avoid race condition
+            from apps.checkin.tasks import check_and_award_badges_task
+            check_and_award_badges_task(user.id)
 
             # Send milestone notification
             try:
@@ -665,8 +668,13 @@ class AllBadgeTemplatesAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from apps.checkin.serializers import BadgeTemplateSerializer
         templates = BadgeTemplate.objects.all()
+        # Pass request in context for absolute URL
+        serializer = BadgeTemplateSerializer(
+            templates, 
+            many=True,
+            context={'request': request}  # ADD THIS
+        )
         return self.success_response({
-            'badge_templates': BadgeTemplateSerializer(templates, many=True).data
+            'badge_templates': serializer.data
         }, status=status.HTTP_200_OK)

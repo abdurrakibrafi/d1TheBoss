@@ -43,10 +43,18 @@ from rest_framework import serializers
 from .models import BadgeTemplate, UserBadge
 
 class BadgeTemplateSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
+    
     class Meta:
         model = BadgeTemplate
-        fields = '__all__'
-
+        fields = ['id', 'badge_type', 'title', 'description', 'image', 'order', 'weeks_required']
+    
+    def get_image(self, obj):
+        if obj.image:
+            return obj.image.url
+        return None
+    
+    
 class UserAppBadgeSerializer(serializers.ModelSerializer):
     badge_template = BadgeTemplateSerializer(read_only=True)
     
