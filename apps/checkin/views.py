@@ -265,48 +265,82 @@ class CalendarDataAPIView(BaseResponseMixin, APIView):
 
 # ─── Profile Dashboard ───────────────────────────────────────────────────────────
 
+# ─── Profile Dashboard ───────────────────────────────────────────────────────────
+
 class ProfileDashboardAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
 
+        # ── Streak ──────────────────────────────────────────────────────────────
         streak_data = {}
-        if hasattr(user, 'streak'):
-            streak_data = UserStreakSerializer(user.streak).data
-
-        badges = UserAppBadge.objects.filter(user=user).select_related('badge_template')
-        from apps.checkin.serializers import UserAppBadgeSerializer
-        badge_data = UserAppBadgeSerializer(badges, many=True).data
-
-        # Total completed weeks (for badge progress display)
-        total_completed = UserWeeklyCheckin.objects.filter(
-            user=user, status='completed'
-        ).count()
-
-        # Current week checkin
-        week_start, week_end = get_current_week_boundaries()
-        current_week = UserWeeklyCheckin.objects.filter(
-            user=user, week_start=week_start
-        ).first()
-
-        # Streak info
         current_streak = 0
         longest_streak = 0
-        if hasattr(user, 'streak'):
-            current_streak = user.streak.current_streak
-            longest_streak = user.streak.longest_streak
+
+        user_streak, _ = UserStreak.objects.get_or_create(
+            user=user,
+            defaults={'current_streak': 0, 'longest_streak': 0}
+        )
+        streak_data = UserStreakSerializer(user_streak).data
+        current_streak = user_streak.current_streak
+        longest_streak = user_streak.longest_streak
+
+        # ── Badges ──────────────────────────────────────────────────────────────
+        badges = UserAppBadge.objects.filter(user=user).select_related('badge_template')
+        latest_badge = badges.first()  # already ordered by -earned_at
+        badge_data = UserAppBadgeSerializer(badges, many=True, context={'request': request}).data
+
+        # ── Weekly check-in stats ────────────────────────────────────────────────
+        all_weekly = UserWeeklyCheckin.objects.filter(user=user)
+        total_completed = all_weekly.filter(status='completed').count()
+        total_missed    = all_weekly.filter(status='missed').count()
+
+        # ── Current week ─────────────────────────────────────────────────────────
+        week_start, week_end = get_current_week_boundaries()
+        current_week = all_weekly.filter(week_start=week_start).first()
+
+        # ── Next badge progress ───────────────────────────────────────────────────
+        next_badge_template = (
+            BadgeTemplate.objects
+            .filter(weeks_required__gt=total_completed)
+            .order_by('weeks_required')
+            .first()
+        )
+        next_badge_progress = None
+        if next_badge_template:
+            next_badge_progress = {
+                'badge_type':     next_badge_template.badge_type,
+                'title':          next_badge_template.title,
+                'weeks_required': next_badge_template.weeks_required,
+                'weeks_completed': total_completed,
+                'weeks_remaining': next_badge_template.weeks_required - total_completed,
+            }
 
         return self.success_response({
-            'streak': streak_data,
-            'current_streak': current_streak,
-            'longest_streak': longest_streak,
-            'badges': badge_data,
-            'total_completed_weekly_checkins': total_completed,
-            'current_week_status': current_week.status if current_week else 'no_record',
-            'current_week_available': current_week.status == 'available' if current_week else False,
-        })
+            # streak
+            'streak':          streak_data,
+            'current_streak':  current_streak,
+            'longest_streak':  longest_streak,
 
+            # badges
+            # badges
+            'latest_badge': UserAppBadgeSerializer(
+                latest_badge, 
+                context={'request': request}
+            ).data if latest_badge else None,
+            'badges':          badge_data,
+            'total_badges_earned': badges.count(),
+            'next_badge_progress': next_badge_progress,
+
+            # weekly check-in
+            'total_completed_weekly_checkins': total_completed,
+            'total_missed_weekly_checkins':    total_missed,
+
+            # current week
+            'current_week_status':     current_week.status if current_week else 'no_record',
+            'current_week_available':  current_week.status == 'available' if current_week else False,
+        })
 
 # ─── Weekly Check-In Questions ───────────────────────────────────────────────────
 
