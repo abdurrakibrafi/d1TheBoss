@@ -163,7 +163,7 @@ class BadgeTemplate(models.Model):
     description = models.TextField(blank=True, null=True)
     image = models.ImageField(upload_to='checkin/badges/', blank=True, null=True)
     order = models.IntegerField(default=0)
-    weeks_required = models.IntegerField(null=True, blank=True)  # Based on completed weeks not days
+    weeks_required = models.IntegerField(null=True, blank=True)  
 
     class Meta:
         ordering = ['order']

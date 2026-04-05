@@ -34,11 +34,6 @@ class WeeklyCheckinResponseSerializer(serializers.ModelSerializer):
         fields = ['question', 'selected_option']
 
 
-# class NotificationSettingSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = NotificationSetting
-#         fields = '__all__'
-
 from rest_framework import serializers
 from .models import BadgeTemplate, UserBadge
 

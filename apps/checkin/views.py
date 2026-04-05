@@ -639,6 +639,7 @@ class PopulateBadgeTemplatesAPIView(BaseResponseMixin, APIView):
             'total_badges': BadgeTemplate.objects.count(),
         }, status=status.HTTP_200_OK)
 
+
 class UserAppBadgesListAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
 
@@ -650,12 +651,12 @@ class UserAppBadgesListAPIView(BaseResponseMixin, APIView):
         return self.success_response({
             'latest_badge': UserAppBadgeSerializer(
                 latest_badge, 
-                context={'request': request}  # ADD THIS
+                context={'request': request}  
             ).data if latest_badge else None,
             'badges': UserAppBadgeSerializer(
                 user_badges, 
                 many=True,
-                context={'request': request}  # ADD THIS
+                context={'request': request}  
             ).data,
             'total_earned': user_badges.count()
         }, status=status.HTTP_200_OK)
@@ -681,6 +682,6 @@ class AllBadgeTemplatesAPIView(BaseResponseMixin, APIView):
             'badge_templates': BadgeTemplateSerializer(
                 templates, 
                 many=True,
-                context={'request': request}  # ADD THIS
+                context={'request': request}  
             ).data
         }, status=status.HTTP_200_OK)

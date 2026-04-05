@@ -364,10 +364,20 @@ class AIChatCore:
                 {"role": "user", "content": f"Original response topic:\n{original_response[:200]}"},
             ]
 
-            response = self._call_api(messages, max_tokens=2000, temperature=0.6)
-            content = response.choices[0].message.content
+            response = self._call_api(messages, max_tokens=100, temperature=0.6)
 
             # NOTE: '— or —\nStart a new chat' is appended at UI level, not here.
+
+            content = response.choices[0].message.content
+    
+            # Clean up formatting — remove extra newlines and normalize quotes
+            content = content.strip()
+            content = content.replace('\n"', ' "')
+            content = content.replace('You could ask:  \n', 'You could ask: ')
+            content = content.replace('You could ask:\n', 'You could ask: ')
+
+            import re
+            content = re.sub(r'You could ask:\s+', 'You could ask: ', content)
 
             return {
                 "content": content,

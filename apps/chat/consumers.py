@@ -105,35 +105,34 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             await self.send_error(f"Unexpected error: {str(e)}")
 
+
     async def handle_bible_chat_message(self, data):
         """Process Bible chat with Preachly structure"""
         try:
             message = data.get("message", "").strip()
-            message_type = data.get("message_type", "objection")  # objection, clarification, yes_no
+            message_type = data.get("message_type", "objection")
             tone = data.get("tone", "Clear and Hopeful")
             depth = data.get("depth", "In-Depth Explanation")
-            
+ 
             if not message:
                 await self.send_error("Message cannot be empty")
                 return
-
+ 
             # Initialize conversation if needed
             if not self.conversation:
                 self.conversation = await database_sync_to_async(ConversationManager)(
                     user=self.user
                 )
-
-            await self.send(json.dumps({"type": "typing", "is_typing": True}))
-
-            # Add user message
+ 
+            # Add user message to DB
             await database_sync_to_async(self.conversation.add_message)(
                 content=message, is_user=True
             )
-
+ 
             user_context = await database_sync_to_async(
                 self.conversation.get_user_spiritual_context
             )()
-
+ 
             saved_tone = (
                 user_context.get("tone_preference", {}).get("name")
                 if user_context
@@ -141,8 +140,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
             if saved_tone:
                 tone = saved_tone
-
-            # Handle different message types
+ 
+            # Handle yes_no BEFORE sending typing indicator
+            # Clarification handlers control their own typing indicator
             if message_type == "yes_no":
                 if message.lower() in ["yes", "yes, explain more"]:
                     await self.handle_clarification_request(data)
@@ -150,16 +150,18 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 elif message.lower() in ["no", "no, thanks"]:
                     await self.handle_no_clarification(data)
                     return
-
+ 
+            # Only send typing for normal messages (not yes/no)
+            await self.send(json.dumps({"type": "typing", "is_typing": True}))
+ 
             # Generate Preachly response
             ai_response_data = await asyncio.get_event_loop().run_in_executor(
                 None, self._generate_preachly_response, message, tone, depth, user_context
             )
-
+ 
             await self.send(json.dumps({"type": "typing", "is_typing": False}))
-
+ 
             if ai_response_data["success"]:
-                # Add AI response
                 ai_message = await database_sync_to_async(
                     self.conversation.add_message
                 )(
@@ -167,8 +169,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     is_user=False,
                     ai_metadata=ai_response_data,
                 )
-
-                # Send structured response
+ 
                 response_data = {
                     "type": "preachly_response",
                     "content": ai_response_data["content"],
@@ -177,14 +178,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     "tone": ai_response_data["tone"],
                     "depth": ai_response_data["depth"],
                     "tokens_used": ai_response_data.get("tokens_used", 0),
-                    "show_clarification": True,  # Show "Need more clarity?" buttons
+                    "show_clarification": True,
                     "timestamp": ai_message.created_at.isoformat(),
                 }
-
+ 
                 await self.send(json.dumps(response_data))
             else:
                 await self.send_error(ai_response_data.get("error", "Unknown error"))
-
+ 
         except Exception as e:
             await self.send_error(f"Error: {str(e)}")
 
@@ -194,11 +195,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
             last_message = await database_sync_to_async(
                 lambda: self.conversation.session.messages.filter(is_user=False).last()
             )()
-
+ 
             if not last_message:
                 await self.send_error("No previous response to clarify")
                 return
-
+ 
             user_context = await database_sync_to_async(
                 self.conversation.get_user_spiritual_context
             )()
@@ -206,16 +207,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 user_context.get("tone_preference", {}).get("name", "Clear and Hopeful")
                 if user_context else "Clear and Hopeful"
             )
-
+ 
             await self.send(json.dumps({"type": "typing", "is_typing": True}))
-
+ 
             clarification_data = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: self.ai.generate_clarification_yes(last_message.content, tone)
             )
-
+ 
             await self.send(json.dumps({"type": "typing", "is_typing": False}))
-
+ 
             if clarification_data["success"]:
                 clarification_message = await database_sync_to_async(
                     self.conversation.add_message
@@ -224,33 +225,34 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     is_user=False,
                     ai_metadata=clarification_data,
                 )
-
+ 
                 await self.send(json.dumps({
                     "type": "clarification_response",
                     "content": clarification_data["content"],
                     "session_id": str(self.conversation.session.id),
                     "message_id": clarification_message.id,
-                    "show_clarification": True,  # Allow follow-up
+                    "show_clarification": True,
                     "timestamp": clarification_message.created_at.isoformat(),
                 }))
-
+ 
         except Exception as e:
             await self.send_error(f"Clarification error: {str(e)}")
 
+
     async def handle_no_clarification(self, data):
         """
-        Handle 'No' — AI suggests a follow-up question.
-        Frontend must append '— or —\nStart a new chat' as static UI text.
+        Handle 'No' — AI suggests follow-up conversation question.
+        Frontend MUST append '— or —\\nStart a new chat' as static UI text.
         """
         try:
             last_message = await database_sync_to_async(
                 lambda: self.conversation.session.messages.filter(is_user=False).last()
             )()
-
+ 
             if not last_message:
                 await self.send_error("No previous response found")
                 return
-
+ 
             user_context = await database_sync_to_async(
                 self.conversation.get_user_spiritual_context
             )()
@@ -258,16 +260,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 user_context.get("tone_preference", {}).get("name", "Clear and Hopeful")
                 if user_context else "Clear and Hopeful"
             )
-
+ 
             await self.send(json.dumps({"type": "typing", "is_typing": True}))
-
+ 
             continuation_data = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: self.ai.generate_clarification_no(last_message.content, tone)
             )
-
+ 
             await self.send(json.dumps({"type": "typing", "is_typing": False}))
-
+ 
             if continuation_data["success"]:
                 continuation_message = await database_sync_to_async(
                     self.conversation.add_message
@@ -276,18 +278,18 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     is_user=False,
                     ai_metadata=continuation_data,
                 )
-
+ 
                 await self.send(json.dumps({
                     "type": "conversation_continuation",
                     "content": continuation_data["content"],
                     "session_id": str(self.conversation.session.id),
                     "message_id": continuation_message.id,
-                    # Frontend renders this static text below the AI suggestion:
+                    # Frontend renders below this:
                     # "— or —\nStart a new chat"
                     "show_new_chat_option": True,
                     "timestamp": continuation_message.created_at.isoformat(),
                 }))
-
+ 
         except Exception as e:
             await self.send_error(f"Continuation error: {str(e)}")
     
