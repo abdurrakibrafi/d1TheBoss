@@ -147,17 +147,17 @@ class DailyCheckinAPIView(BaseResponseMixin, APIView):
     def _ensure_current_week_exists(self, user):
         week_start, week_end = get_current_week_boundaries()
         
-        # Fix any existing null dates first
         UserWeeklyCheckin.objects.filter(
-            user=user, 
-            week_start__isnull=True
+            user=user, week_start__isnull=True
         ).update(week_start=week_start, week_end=week_end)
         
-        # Now check — if ANY available week exists, stop
+        # Check by week_start FIRST — this is the guard against duplicates
+        if UserWeeklyCheckin.objects.filter(user=user, week_start=week_start).exists():
+            return
+
         if UserWeeklyCheckin.objects.filter(user=user, status='available').exists():
             return
         
-        # No available week at all — create one
         existing_count = UserWeeklyCheckin.objects.filter(user=user).count()
         UserWeeklyCheckin.objects.create(
             user=user,
@@ -168,7 +168,7 @@ class DailyCheckinAPIView(BaseResponseMixin, APIView):
             is_available=True,
             is_completed=False,
         )
-
+        
 # ─── Calendar ───────────────────────────────────────────────────────────────────
 
 class CalendarDataAPIView(BaseResponseMixin, APIView):
