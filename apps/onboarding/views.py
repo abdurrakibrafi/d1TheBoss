@@ -493,7 +493,24 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
         print(user_goal_obj)
         print(goal_preference_obj)
 
+        # Get the current goal type (either from preference or calculated from faith goals)
+        from apps.goal.utils import get_user_primary_goal_type
+        current_goal_type = get_user_primary_goal_type(user)
+        
+        # Get goal display name
+        goal_display_map = {
+            'scripture': 'Scripture Knowledge',
+            'conversation': 'Confidence Goal', 
+            'share_faith': 'Inspiration Goal'
+        }
+        current_goal_display = goal_display_map.get(current_goal_type, 'Unknown Goal')
+
         data = {
+            "current_goal": {
+                "goal_type": current_goal_type,
+                "goal_display": current_goal_display,
+                "is_from_preference": UserGoalPreference.objects.filter(user=user).exists()
+            },
             "goal_preference": (
                 UserGoalPreferenceSerializer(
                     UserGoalPreference.objects.filter(user=user).first(),

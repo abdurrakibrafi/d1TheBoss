@@ -7,10 +7,9 @@ from datetime import timedelta, date
 def get_current_week_boundaries():
     """Get current Sunday-Saturday week boundaries"""
     today = timezone.now().date()
-    # Sunday = weekday 6 in Python (Mon=0, Sun=6)
     days_since_sunday = (today.weekday() + 1) % 7
-    week_start = today - timedelta(days=days_since_sunday)  # This Sunday
-    week_end = week_start + timedelta(days=6)               # This Saturday
+    week_start = today - timedelta(days=days_since_sunday)
+    week_end = week_start + timedelta(days=6)
     return week_start, week_end
 
 
@@ -24,21 +23,29 @@ def get_week_boundaries_for_date(d):
 
 class UserStreak(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='streak')
+    
+    # Daily streak
     current_streak = models.IntegerField(default=0)
     longest_streak = models.IntegerField(default=0)
     last_checkin_date = models.DateField(null=True, blank=True)
+
+    # Weekly check-in streak (NEW)
+    # Consecutive completed weekly check-ins
+    current_weekly_streak = models.IntegerField(default=0)
+    longest_weekly_streak = models.IntegerField(default=0)
+    # True when current_weekly_streak >= 2 → show red flame
+    has_red_flame = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def is_streak_broken(self):
-        """Check if more than 1 day passed since last checkin"""
         if not self.last_checkin_date:
             return False
         return timezone.now().date() > self.last_checkin_date + timedelta(days=1)
 
     def __str__(self):
-        return f"{self.user.email} - streak: {self.current_streak}"
+        return f"{self.user.email} - daily: {self.current_streak} | weekly: {self.current_weekly_streak}"
 
 
 class DailyCheckin(models.Model):
@@ -82,24 +89,19 @@ class WeeklyCheckinOption(models.Model):
 
 
 class UserWeeklyCheckin(models.Model):
-    """
-    One record per user per calendar week (Sunday-Saturday).
-    Created automatically by Celery task every Sunday.
-    Week 1 is created immediately on user join.
-    """
     STATUS_CHOICES = [
-        ('available', 'Available'),    # Current week, not yet completed
-        ('completed', 'Completed'),    # User completed this week's check-in
-        ('missed', 'Missed'),          # Week passed without completing
+        ('available', 'Available'),
+        ('completed', 'Completed'),
+        ('missed', 'Missed'),
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='weekly_checkins', blank=True, null=True)
-    week_number = models.IntegerField(blank=True, null=True)          # Sequential: 1, 2, 3...
-    week_start = models.DateField(blank=True, null=True)              # Sunday of that week
-    week_end = models.DateField(blank=True, null=True)                # Saturday of that week
+    week_number = models.IntegerField(blank=True, null=True)
+    week_start = models.DateField(blank=True, null=True)
+    week_end = models.DateField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='available')
 
-    # Legacy fields kept for backward compat
+    # Legacy fields
     is_available = models.BooleanField(default=True)
     is_completed = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -113,7 +115,6 @@ class UserWeeklyCheckin(models.Model):
         return f"{self.user.email} - Week {self.week_number} ({self.status})"
 
     def save(self, *args, **kwargs):
-        # Keep legacy fields in sync with status
         self.is_completed = (self.status == 'completed')
         self.is_available = (self.status == 'available')
         super().save(*args, **kwargs)
@@ -124,7 +125,6 @@ class UserWeeklyCheckin(models.Model):
         return self.week_start <= today <= self.week_end
 
     def can_complete(self):
-        """User can complete if status is available and it's still this week or a current open week"""
         return self.status == 'available'
 
 
@@ -141,21 +141,23 @@ class UserWeeklyCheckinResponse(models.Model):
         return f"Week {self.weekly_checkin.week_number} - Q{self.question.question_order}"
 
 
-# ─── Badge System ───────────────────────────────────────────────────────────────
+# ─── Badge System ────────────────────────────────────────────────────────────────
 
-BADGE_MILESTONES = [1, 2, 3, 4, 8, 12, 24, 52]  # Total completed weeks
+# Correct milestones per client doc
+# 1, 2, 3, 4, 12, 24, 52 completed weeks
+BADGE_MILESTONES = [1, 2, 3, 4, 12, 24, 52]
 
 
 class BadgeTemplate(models.Model):
     BADGE_TYPE = [
         ('default', 'Default'),
-        ('first_week_checked', 'First Week Checked'),
-        ('first_week', 'First Week'),
-        ('two_week', 'Two Week'),
-        ('one_month', 'One Month'),
-        ('three_months', 'Three Months'),
-        ('six_months', 'Six Months'),
-        ('one_year', 'One Year'),
+        ('week_1', 'Week 1 — Seed Planted'),
+        ('week_2', 'Week 2 — Rooted in Grace'),
+        ('week_3', 'Week 3 — New Life Rising'),
+        ('week_4', 'Week 4 — Standing in the Light'),
+        ('week_12', 'Week 12 — Branches of Influence'),
+        ('week_24', 'Week 24 — Flourishing in Faith'),
+        ('week_52', 'Week 52 — Fruit of a Faithful Life'),
     ]
 
     badge_type = models.CharField(max_length=100, choices=BADGE_TYPE, unique=True)
@@ -163,7 +165,7 @@ class BadgeTemplate(models.Model):
     description = models.TextField(blank=True, null=True)
     image = models.ImageField(upload_to='checkin/badges/', blank=True, null=True)
     order = models.IntegerField(default=0)
-    weeks_required = models.IntegerField(null=True, blank=True)  
+    weeks_required = models.IntegerField(null=True, blank=True)
 
     class Meta:
         ordering = ['order']
@@ -185,7 +187,7 @@ class UserAppBadge(models.Model):
         return f"{self.user.email} - {self.badge_template.title if self.badge_template else 'Unknown'}"
 
 
-# Keep UserBadge for backward compat
+# Keep for backward compat
 class UserBadge(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='badges', blank=True, null=True)
     weeks_completed = models.IntegerField(blank=True, null=True)

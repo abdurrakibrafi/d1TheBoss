@@ -7,7 +7,6 @@ logger = logging.getLogger(__name__)
 
 
 def get_week_boundaries_for_date(d):
-    """Get Sunday-Saturday week boundaries for a given date"""
     from datetime import timedelta
     days_since_sunday = (d.weekday() + 1) % 7
     week_start = d - timedelta(days=days_since_sunday)
@@ -17,11 +16,7 @@ def get_week_boundaries_for_date(d):
 
 @shared_task(name='checkin.create_weekly_checkins_for_all_users')
 def create_weekly_checkins_for_all_users():
-    """
-    Runs every Sunday at 00:01 UTC.
-    Creates a new UserWeeklyCheckin for every user for the new week.
-    Also marks previous week as missed if not completed.
-    """
+    """Every Sunday 00:01 UTC — creates new week, marks last week missed."""
     from django.contrib.auth import get_user_model
     from apps.checkin.models import UserWeeklyCheckin
 
@@ -35,7 +30,7 @@ def create_weekly_checkins_for_all_users():
 
     for user in users:
         try:
-            # Mark last week as missed if not completed
+            # Mark last week missed if still available
             last_week_start = week_start - timedelta(days=7)
             last_week_checkin = UserWeeklyCheckin.objects.filter(
                 user=user,
@@ -49,11 +44,13 @@ def create_weekly_checkins_for_all_users():
                 last_week_checkin.save()
                 missed_count += 1
 
-            # Calculate this user's week number
+                # Reset weekly streak since week was missed
+                _reset_weekly_streak(user)
+
+            # Create new week
             existing_weeks = UserWeeklyCheckin.objects.filter(user=user).count()
             next_week_num = existing_weeks + 1
 
-            # Create new week (avoid duplicates)
             checkin, created = UserWeeklyCheckin.objects.get_or_create(
                 user=user,
                 week_start=week_start,
@@ -77,26 +74,51 @@ def create_weekly_checkins_for_all_users():
     return f"Created: {created_count}, Missed: {missed_count}"
 
 
+def _reset_weekly_streak(user):
+    """Reset weekly streak when user misses a week."""
+    try:
+        from apps.checkin.models import UserStreak
+        streak, _ = UserStreak.objects.get_or_create(user=user)
+        streak.current_weekly_streak = 0
+        streak.has_red_flame = False
+        streak.save()
+    except Exception as e:
+        logger.error(f"Error resetting weekly streak for user {user.id}: {str(e)}")
+
+
+def _update_weekly_streak(user):
+    """
+    Increment weekly streak after check-in completion.
+    Red flame appears when current_weekly_streak >= 2.
+    """
+    try:
+        from apps.checkin.models import UserStreak
+        streak, _ = UserStreak.objects.get_or_create(user=user)
+        streak.current_weekly_streak += 1
+        if streak.current_weekly_streak > streak.longest_weekly_streak:
+            streak.longest_weekly_streak = streak.current_weekly_streak
+        # Red flame = 2 or more consecutive completed weeks
+        streak.has_red_flame = streak.current_weekly_streak >= 2
+        streak.save()
+        return streak
+    except Exception as e:
+        logger.error(f"Error updating weekly streak for user {user.id}: {str(e)}")
+        return None
+
+
 @shared_task(name='checkin.close_week_on_saturday')
 def close_week_on_saturday():
-    """
-    Runs every Sunday at 00:00 UTC (just before create_weekly_checkins_for_all_users).
-    Marks all still-available checkins from last week as missed.
-    """
+    """Every Sunday 00:00 UTC — mark last week missed."""
     from apps.checkin.models import UserWeeklyCheckin
 
     today = timezone.now().date()
-    # Last week's boundaries
-    last_week_end = today - timedelta(days=1)  # Yesterday = last Saturday
+    last_week_end = today - timedelta(days=1)
     last_week_start = last_week_end - timedelta(days=6)
 
     missed = UserWeeklyCheckin.objects.filter(
         week_start=last_week_start,
         status='available'
-    ).update(
-        status='missed',
-        is_available=False
-    )
+    ).update(status='missed', is_available=False)
 
     logger.info(f"Closed {missed} weekly checkins as missed")
     return f"Marked {missed} as missed"
@@ -105,9 +127,10 @@ def close_week_on_saturday():
 @shared_task(name='checkin.check_and_award_badges')
 def check_and_award_badges_task(user_id):
     """
-    Award badges based on total completed weekly check-ins.
-    Milestones: 1, 2, 3, 4, 8, 12, 24, 52 completed weeks.
-    Badges NEVER reset.
+    Award badges based on TOTAL completed weekly check-ins.
+    Milestones: 1, 2, 3, 4, 12, 24, 52
+    Badges NEVER reset. NEVER awarded early.
+    User needs EXACTLY that many completed weeks.
     """
     from django.contrib.auth import get_user_model
     from apps.checkin.models import UserWeeklyCheckin, BadgeTemplate, UserAppBadge, BADGE_MILESTONES
@@ -117,29 +140,31 @@ def check_and_award_badges_task(user_id):
     try:
         user = User.objects.get(id=user_id)
     except User.DoesNotExist:
-        return
+        return "User not found"
 
-    # Count total completed weeks (not streak, TOTAL)
+    # Count TOTAL completed weeks — not streak, not consecutive
     total_completed = UserWeeklyCheckin.objects.filter(
         user=user,
         status='completed'
     ).count()
 
-    # Badge type mapping by milestone index
+    logger.info(f"Badge check for user {user.id}: {total_completed} completed weeks")
+
+    # Correct badge type mapping per client doc
     milestone_to_badge_type = {
-        1: 'first_week_checked',
-        2: 'first_week',
-        3: 'two_week',
-        4: 'one_month',
-        8: 'three_months',
-        12: 'six_months',
-        24: 'one_year',
-        52: 'one_year',  # Reuse one_year for 52 if no separate badge
+        1:  'week_1',   # Seed Planted
+        2:  'week_2',   # Rooted in Grace
+        3:  'week_3',   # New Life Rising
+        4:  'week_4',   # Standing in the Light
+        12: 'week_12',  # Branches of Influence
+        24: 'week_24',  # Flourishing in Faith
+        52: 'week_52',  # Fruit of a Faithful Life
     }
 
     newly_awarded = []
 
     for milestone in BADGE_MILESTONES:
+        # Only award if user has reached this milestone
         if total_completed >= milestone:
             badge_type = milestone_to_badge_type.get(milestone)
             if not badge_type:
@@ -152,24 +177,26 @@ def check_and_award_badges_task(user_id):
                     badge_template=template
                 )
                 if created:
-                    newly_awarded.append(badge_type)
+                    newly_awarded.append({
+                        'badge_type': badge_type,
+                        'title': template.title,
+                        'description': template.description,
+                        'image': template.image.url if template.image else None,
+                        'weeks_required': template.weeks_required,
+                    })
                     logger.info(f"Awarded badge '{badge_type}' to user {user.id}")
             except BadgeTemplate.DoesNotExist:
-                logger.warning(f"BadgeTemplate '{badge_type}' not found")
+                logger.warning(f"BadgeTemplate '{badge_type}' not found — run /badges/populate/ first")
                 continue
 
-    return f"Awarded: {newly_awarded}"
+    return newly_awarded  # Return list so WeeklyCheckinSubmitAPIView can use it
 
 
 @shared_task(name='checkin.create_week1_for_new_user')
 def create_week1_for_new_user(user_id):
-    """
-    Called immediately when a new user registers.
-    Creates Week 1 so user can check in right away — no waiting.
-    """
+    """Called on new user register — creates Week 1 immediately."""
     from django.contrib.auth import get_user_model
-    from apps.checkin.models import UserWeeklyCheckin
-    from apps.checkin.models import get_current_week_boundaries
+    from apps.checkin.models import UserWeeklyCheckin, get_current_week_boundaries
 
     User = get_user_model()
 
