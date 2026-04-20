@@ -1,8 +1,8 @@
-from firebase_admin import messaging
 import logging
+from django.utils import timezone
 from apps.notification.models import Notification
 from apps.accounts.models import User
-from apps.notification.tasks import send_push_notification, send_websocket_notification, send_email_notification
+from apps.notification.tasks import send_push_notification, send_email_notification
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,8 @@ class NotificationService:
         if notif_type == 'push':
             send_push_notification.delay(notification.id)
         elif notif_type == 'in_app':
-            send_websocket_notification.delay(notification.id)
+            # In-app notifications are stored in DB and available via API; mark as sent
+            notification.sent_at = timezone.now()
+            notification.save()
         elif notif_type == 'email':
             send_email_notification.delay(notification.id)

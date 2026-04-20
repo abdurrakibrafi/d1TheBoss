@@ -221,3 +221,62 @@ def create_week1_for_new_user(user_id):
 
     logger.info(f"Week 1 {'created' if created else 'already exists'} for user {user.id}")
     return f"Week 1 {'created' if created else 'already exists'}"
+
+
+@shared_task(name='checkin.send_weekly_checkin_reminder')
+def send_weekly_checkin_reminder():
+    """
+    Sends weekly check-in reminder to users who haven't completed this week.
+    Runs Sunday 6PM, Wednesday 7PM, Saturday 10AM UTC.
+    """
+    from django.contrib.auth import get_user_model
+    from apps.checkin.models import UserWeeklyCheckin, get_current_week_boundaries
+    from apps.notification.services.notification_service import NotificationService
+
+    User = get_user_model()
+    week_start, week_end = get_current_week_boundaries()
+    
+    today = timezone.now()
+    day_of_week = today.weekday()  # Mon=0, Sun=6
+
+    # Different message per day
+    if day_of_week == 6:  # Sunday
+        title = "🌿 Time to Reflect"
+        message = "Time to reflect on your week. Your weekly check-in is ready."
+    elif day_of_week == 2:  # Wednesday
+        title = "📖 Midweek Check-In"
+        message = "Your weekly check-in is waiting. Take a moment to reflect."
+    elif day_of_week == 5:  # Saturday
+        title = "⏰ Last Chance This Week"
+        message = "Last chance to complete this week's reflection before it closes."
+    else:
+        title = "📖 Weekly Check-In Reminder"
+        message = "Don't forget to complete your weekly check-in."
+
+    # Only send to users who have an available (not completed) week
+    pending_checkins = UserWeeklyCheckin.objects.filter(
+        week_start=week_start,
+        status='available'
+    ).select_related('user')
+
+    sent_count = 0
+    for checkin in pending_checkins:
+        try:
+            NotificationService.send_notification(
+                user_id=checkin.user.id,
+                title=title,
+                message=message,
+                notification_types=['push', 'in_app'],
+                data={
+                    "action": "weekly_checkin_reminder",
+                    "week_number": checkin.week_number,
+                }
+            )
+            sent_count += 1
+            logger.info(f"✅ Weekly reminder sent to user {checkin.user.id}")
+        except Exception as e:
+            logger.error(f"❌ Failed to send reminder to user {checkin.user.id}: {str(e)}")
+            continue
+
+    logger.info(f"Weekly reminder task complete — sent to {sent_count} users")
+    return f"Sent to {sent_count} users"

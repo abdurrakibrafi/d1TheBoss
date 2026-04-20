@@ -33,6 +33,9 @@ from apps.checkin.tasks import check_and_award_badges_task
 
 # ─── Streak Notification Helper ──────────────────────────────────────────────────
 
+import logging
+logger = logging.getLogger(__name__)
+
 class StreakNotificationService:
 
     @staticmethod
@@ -53,17 +56,28 @@ class StreakNotificationService:
 
     @staticmethod
     def send_streak_notification(user, current_streak, is_milestone=False):
-        notification_data = StreakNotificationService.get_streak_notification_data(current_streak, is_milestone)
+        notification_data = StreakNotificationService.get_streak_notification_data(
+            current_streak, is_milestone
+        )
         try:
+            logger.info(f"📱 Sending streak notification to user {user.id} — streak: {current_streak}, milestone: {is_milestone}")
+            
             NotificationService.send_notification(
                 user_id=user.id,
                 title=notification_data["title"],
                 message=notification_data["message"],
                 notification_types=['push', 'in_app'],
-                data={"action": "streak_update", "current_streak": current_streak, "is_milestone": is_milestone}
+                data={
+                    "action": "streak_update",
+                    "current_streak": current_streak,
+                    "is_milestone": is_milestone
+                }
             )
-        except Exception:
-            pass
+            
+            logger.info(f"✅ Streak notification sent to user {user.id}")
+            
+        except Exception as e:
+            logger.error(f"❌ Streak notification failed for user {user.id}: {str(e)}")
 
 
 # ─── Daily Check-In ──────────────────────────────────────────────────────────────

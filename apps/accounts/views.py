@@ -36,6 +36,8 @@ from .serializers import (
     VerifyEmailChangeSerializer,
     ResendEmailChangeOTPSerializer,
 )
+import logging
+logger = logging.getLogger(__name__)
 from apps.accounts.utils.send_otp_email import send_otp_email
 from django.conf import settings
 from apps.core.utils.mixins import BaseResponseMixin
@@ -428,13 +430,24 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
             if serializer.is_valid():
                 updated_profile = serializer.save()
                     
-                NotificationService.send_notification(
-                    user_id=request.user.id,
-                    title="Profile Updated!",
-                    message="Your profile was just updated. Keep shining!",
-                    notification_types=['push', 'in_app', 'email'],
-                    data={"action": "profile_update"}
-                )
+                 # ─── Notification with logging ────────────────────────────
+                try:
+                    logger.info(f"📱 Sending profile update notification to user {request.user.id} ({request.user.email})")
+                    
+                    NotificationService.send_notification(
+                        user_id=request.user.id,
+                        title="Profile Updated!",
+                        message="Your profile was just updated. Keep shining!",
+                        notification_types=['push', 'in_app', 'email'],
+                        data={"action": "profile_update"}
+                    )
+                    
+                    logger.info(f"✅ Notification sent successfully to user {request.user.id}")
+                    
+                except Exception as notif_error:
+                    # Don't break profile update if notification fails
+                    logger.error(f"❌ Notification failed for user {request.user.id}: {str(notif_error)}")
+                # ────────────────────────────
 
                 if (
                 # Check if email change was requested
@@ -480,13 +493,24 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
             if serializer.is_valid():
                 updated_profile = serializer.save()
 
-                NotificationService.send_notification(
-                    user_id=request.user.id,
-                    title="Profile Updated!",
-                    message="Your profile was just updated. Keep shining!",
-                    notification_types=['push', 'in_app', 'email'],
-                    data={"action": "profile_update"}
-                )
+                 # ─── Notification with logging ────────────────────────────
+                try:
+                    logger.info(f"📱 Sending profile update notification to user {request.user.id} ({request.user.email})")
+                    
+                    NotificationService.send_notification(
+                        user_id=request.user.id,
+                        title="Profile Updated!",
+                        message="Your profile was just updated. Keep shining!",
+                        notification_types=['push', 'in_app', 'email'],
+                        data={"action": "profile_update"}
+                    )
+                    
+                    logger.info(f"✅ Notification sent successfully to user {request.user.id}")
+                    
+                except Exception as notif_error:
+                    # Don't break profile update if notification fails
+                    logger.error(f"❌ Notification failed for user {request.user.id}: {str(notif_error)}")
+                # ─────────────────────────────────────────────────────────
 
 
                 # Check if email change was requested
