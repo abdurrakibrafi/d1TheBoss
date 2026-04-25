@@ -281,6 +281,21 @@ class ProfileDashboardAPIView(BaseResponseMixin, APIView):
                 'weeks_remaining': next_badge_template.weeks_required - total_completed,
             }
 
+        current_goal, goal_created = UserGoal.get_or_create_weekly_goal(user)
+        current_goal_data = {
+            'week_start': current_goal.week_start,
+            'week_end': current_goal.week_end,
+            'days_remaining': current_goal.days_remaining,
+            'goal_type': current_goal.goal_type,
+            'goal_display': current_goal.get_goal_type_display(),
+            'current_count': current_goal.current_count,
+            'target_count': current_goal.target_count,
+            'completed': current_goal.completed,
+            'progress_percentage': current_goal.progress_percentage(),
+            'is_new_goal': goal_created,
+            'week_number': current_goal.week_start.isocalendar()[1],
+        }
+
         return self.success_response({
             'streak': streak_data,
             'current_streak': user_streak.current_streak,
@@ -299,6 +314,7 @@ class ProfileDashboardAPIView(BaseResponseMixin, APIView):
             'total_missed_weekly_checkins': total_missed,
             'current_week_status': current_week.status if current_week else 'no_record',
             'current_week_available': current_week.status == 'available' if current_week else False,
+            'current_goal': current_goal_data,
         })
 
 
