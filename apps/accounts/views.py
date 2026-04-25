@@ -438,7 +438,7 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
                         user_id=request.user.id,
                         title="Profile Updated!",
                         message="Your profile was just updated. Keep shining!",
-                        notification_types=['push', 'in_app', 'email'],
+                        notification_types=['push', 'in_app'],
                         data={"action": "profile_update"}
                     )
                     
@@ -501,7 +501,7 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
                         user_id=request.user.id,
                         title="Profile Updated!",
                         message="Your profile was just updated. Keep shining!",
-                        notification_types=['push', 'in_app', 'email'],
+                        notification_types=['push'],
                         data={"action": "profile_update"}
                     )
                     
