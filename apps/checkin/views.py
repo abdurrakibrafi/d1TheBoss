@@ -426,12 +426,22 @@ class WeeklyCheckinSubmitAPIView(BaseResponseMixin, APIView):
             if not isinstance(newly_awarded, list):
                 newly_awarded = []
 
-            # Get the most recently awarded badge for popup
-            newly_earned_badge = None
-            if newly_awarded:
-                latest = newly_awarded[-1]  # Last one awarded this submission
-                newly_earned_badge = latest
+            def format_badge_description(description):
+                if not description:
+                    return None
+                sentences = [s.strip() for s in description.split('.') if s.strip()]
+                if len(sentences) <= 1:
+                    return description
+                return '\n'.join(sentences[:-1]) + '\n\n' + sentences[-1]
 
+            newly_earned_badge = None
+
+            if newly_awarded:
+                latest = newly_awarded[-1]
+                if latest and 'description' in latest:
+                    latest['description'] = format_badge_description(latest['description'])
+                newly_earned_badge = latest
+                
             # Send notification
             try:
                 StreakNotificationService.send_streak_notification(
