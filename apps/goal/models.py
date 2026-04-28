@@ -83,7 +83,9 @@ class UserGoal(models.Model):
         if existing_goal:
             return existing_goal, False
         
-        target_count = 25 if primary_goal_type == 'scripture' else 10
+        TARGET_COUNTS = {'scripture': 10, 'conversation': 10, 'share_faith': 7}
+        target_count = TARGET_COUNTS.get(primary_goal_type, 10)
+
         goal = cls.objects.create(
             user=user,
             goal_type=primary_goal_type,
@@ -113,13 +115,16 @@ class UserGoal(models.Model):
             week_start=week_start,
             goal_type=new_goal_type
         ).first()
-        
+
+
+        TARGET_COUNTS = {'scripture': 10, 'conversation': 10, 'share_faith': 7}
+
         if active_goal:
-            active_goal.target_count = 25 if new_goal_type == 'scripture' else 10
+            active_goal.target_count = TARGET_COUNTS.get(new_goal_type, 10)
             active_goal.save(update_fields=['target_count'])
             return active_goal, False
         
-        target_count = 25 if new_goal_type == 'scripture' else 10
+        target_count = TARGET_COUNTS.get(new_goal_type, 10)
         new_goal = cls.objects.create(
             user=user,
             goal_type=new_goal_type,
