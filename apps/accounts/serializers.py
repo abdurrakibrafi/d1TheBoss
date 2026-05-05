@@ -470,16 +470,10 @@ class SocialAuthSerializer(serializers.Serializer):
 
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):
-    # User fields
     email = serializers.EmailField(required=False)
-
-    # Profile fields
     name = serializers.CharField(max_length=100, required=False)
     date_of_birth = serializers.DateField(required=False)
-
     profile_picture = serializers.ImageField(required=False, allow_null=True)
-
-    # Add this field to handle image deletion
     remove_profile_picture = serializers.BooleanField(required=False, default=False)
 
     class Meta:
@@ -494,19 +488,11 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
 
     def validate_profile_picture(self, value):
         if value:
-            # Check file size (e.g., max 5MB)
             if value.size > 5 * 1024 * 1024:
-                raise serializers.ValidationError(
-                    "Image file too large. Maximum size is 5MB."
-                )
-
-            # Check file type
+                raise serializers.ValidationError("Image file too large. Maximum size is 5MB.")
             allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
             if value.content_type not in allowed_types:
-                raise serializers.ValidationError(
-                    "Only JPEG, PNG, GIF, and WebP images are allowed."
-                )
-
+                raise serializers.ValidationError("Only JPEG, PNG, GIF, and WebP images are allowed.")
         return value
 
     def validate_email(self, value):
@@ -517,60 +503,36 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         return value
 
     def update(self, instance, validated_data):
-        user = instance.user
-        email = validated_data.pop("email", None)
-        remove_profile_picture = validated_data.pop("remove_profile_picture", False)
+        print(f"🔥 UPDATE CALLED, validated_data: {validated_data}", flush=True)
+        try:
+            validated_data.pop("email", None)
+            remove_profile_picture = validated_data.pop("remove_profile_picture", False)
 
-        # Handle profile picture removal
-        if remove_profile_picture:
-            if instance.profile_picture:
-                # Delete the old image file
-                instance.profile_picture.delete(save=False)
-            instance.profile_picture = None
-
-        # Handle email change separately
-        if email and email != user.email:
-            # Store new email temporarily
-            instance.temp_email = email
-            instance.save()
-
-            # Generate OTP for email verification
-            otp_code = self.generate_otp()
-            OTP.objects.create(
-                user=user,
-                otp=otp_code,
-                purpose="email_change",
-                expires_at=timezone.now() + timedelta(minutes=10),
-            )
-
-            send_otp_email(user, otp_code, "email_change", to_email=instance.temp_email)
-
-        # Update other profile fields
-        for attr, value in validated_data.items():
-            if attr == "profile_picture" and value:
-                # Delete old image if exists
+            if remove_profile_picture:
                 if instance.profile_picture:
                     instance.profile_picture.delete(save=False)
-            setattr(instance, attr, value)
+                instance.profile_picture = None
 
-        instance.save()
-        return instance
+            for attr, value in validated_data.items():
+                if attr == "profile_picture" and value:
+                    if instance.profile_picture:
+                        instance.profile_picture.delete(save=False)
+                setattr(instance, attr, value)
 
-    def generate_otp(self):
-        return str(random.randint(1000, 9999))
+            instance.save()
+            print("🔥 INSTANCE SAVED OK", flush=True)
+            return instance
+
+        except Exception as e:
+            print(f"💀 SAVE CRASHED: {e}", flush=True)
+            raise
 
     def to_representation(self, instance):
-        """Custom representation to include full image URL"""
         data = super().to_representation(instance)
         request = self.context.get("request")
-
         if instance.profile_picture and request:
-            data["profile_picture"] = request.build_absolute_uri(
-                instance.profile_picture.url
-            )
-
+            data["profile_picture"] = request.build_absolute_uri(instance.profile_picture.url)
         return data
-
 
 class VerifyEmailChangeSerializer(serializers.Serializer):
     otp = serializers.CharField(
