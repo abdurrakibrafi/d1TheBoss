@@ -487,21 +487,16 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
             return self.handle_exception(e)
 
     def patch(self, request):
-        """Update profile - partial update"""
         try:
             profile = self.get_object()
             serializer = self.get_serializer(profile, data=request.data, partial=True)
-            serializer = self.get_serializer(profile, data=request.data, partial=True)
-            print(f"🔥 SERIALIZER VALID: {serializer.is_valid()}", flush=True)  # add this
-            print(f"🔥 ERRORS: {serializer.errors}", flush=True) 
-
+            
             if serializer.is_valid():
+                print("🔥 VALID, SAVING", flush=True)
                 updated_profile = serializer.save()
+                print("🔥 SAVED, SENDING NOTIFICATION", flush=True)
 
-                 # ─── Notification with logging ────────────────────────────
                 try:
-                    logger.info(f"📱 Sending profile update notification to user {request.user.id} ({request.user.email})")
-                    
                     NotificationService.send_notification(
                         user_id=request.user.id,
                         title="Profile Updated!",
@@ -509,38 +504,13 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
                         notification_types=['push'],
                         data={"action": "profile_update"}
                     )
-                    
-                    logger.info(f"✅ Notification sent successfully to user {request.user.id}")
-                    
+                    print("✅ NOTIFICATION SENT", flush=True)
                 except Exception as notif_error:
-                    # Don't break profile update if notification fails
-                    logger.error(f"❌ Notification failed for user {request.user.id}: {str(notif_error)}")
-                # ─────────────────────────────────────────────────────────
+                    print(f"❌ NOTIF ERROR: {notif_error}", flush=True)
 
-
-                # Check if email change was requested
-                if (
-                    "email" in request.data
-                    and request.data["email"] != request.user.email
-                ):
-                    return self.success_response(
-                        data={
-                            "profile": self.get_serializer(updated_profile).data,
-                            "email_change_pending": True,
-                            "temp_email": updated_profile.temp_email,
-                            "current_email": request.user.email,
-                        },
-                        message="Profile updated. Please verify your new email address.",
-                        action_required="EMAIL_VERIFICATION",
-                    )
-
-                # Regular profile update
                 response_data = self.get_serializer(updated_profile).data
                 response_data["email"] = request.user.email
-
-                return self.success_response(
-                    data=response_data, message="Profile updated successfully"
-                )
+                return self.success_response(data=response_data, message="Profile updated successfully")
 
             return self.error_response(
                 message="Validation failed",
@@ -550,6 +520,7 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
             )
 
         except Exception as e:
+            print(f"💀 OUTER ERROR: {e}", flush=True)
             return self.handle_exception(e)
 
 
