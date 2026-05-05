@@ -414,6 +414,15 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
             data = serializer.data
             data["email"] = request.user.email
 
+            NotificationService.send_notification(
+                        user_id=request.user.id,
+                        title="Profile Updated!",
+                        message="Your profile was just updated. Keep shining!",
+                        notification_types=['push', 'in_app'],
+                        data={"action": "profile_update"}
+                    )
+            print("✅ NOTIFICATION SENT", flush=True)
+
             return self.success_response(
                 data=data, message="Profile retrieved successfully" 
             )
