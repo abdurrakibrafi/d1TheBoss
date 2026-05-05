@@ -429,7 +429,7 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
 
             if serializer.is_valid():
                 updated_profile = serializer.save()
-                    
+                print("🔥 NOTIFICATION BLOCK REACHED", flush=True)
                  # ─── Notification with logging ────────────────────────────
                 try:
                     logger.info(f"📱 Sending profile update notification to user {request.user.id} ({request.user.email})")
@@ -441,11 +441,13 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
                         notification_types=['push', 'in_app'],
                         data={"action": "profile_update"}
                     )
+                    print("✅ NOTIFICATION SENT", flush=True)
                     
                     logger.info(f"✅ Notification sent successfully to user {request.user.id}")
                     
                 except Exception as notif_error:
                     # Don't break profile update if notification fails
+                    print(f"❌ NOTIF ERROR: {notif_error}", flush=True)
                     logger.error(f"❌ Notification failed for user {request.user.id}: {str(notif_error)}")
                 # ────────────────────────────
 
