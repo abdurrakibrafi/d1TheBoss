@@ -414,15 +414,6 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
             data = serializer.data
             data["email"] = request.user.email
 
-            NotificationService.send_notification(
-                        user_id=request.user.id,
-                        title="Profile Updated!",
-                        message="Your profile was just updated. Keep shining!",
-                        notification_types=['push', 'in_app'],
-                        data={"action": "profile_update"}
-                    )
-            print("✅ NOTIFICATION SENT", flush=True)
-
             return self.success_response(
                 data=data, message="Profile retrieved successfully" 
             )
@@ -500,6 +491,9 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
         try:
             profile = self.get_object()
             serializer = self.get_serializer(profile, data=request.data, partial=True)
+            serializer = self.get_serializer(profile, data=request.data, partial=True)
+            print(f"🔥 SERIALIZER VALID: {serializer.is_valid()}", flush=True)  # add this
+            print(f"🔥 ERRORS: {serializer.errors}", flush=True) 
 
             if serializer.is_valid():
                 updated_profile = serializer.save()
