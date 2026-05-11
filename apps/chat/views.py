@@ -490,6 +490,7 @@ class NeedMoreClarityView(BaseResponseMixin, APIView):
                         data={
                             'needs_clarity': True,
                             'clarification_provided': True,
+                            'show_clarification': False, 
                             'clarification_message': ChatMessageSerializer(new_message).data
                         },
                         message="Clarification provided"
@@ -511,6 +512,7 @@ class NeedMoreClarityView(BaseResponseMixin, APIView):
                         data={
                             'needs_clarity': False,
                             'clarification_provided': True,
+                            'show_clarification': False,
                             # Frontend renders '— or —\nStart a new chat' below this
                             'show_new_chat_option': True,
                             'continuation_message': ChatMessageSerializer(new_message).data

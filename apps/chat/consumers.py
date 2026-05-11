@@ -244,7 +244,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     "content": clarification_data["content"],
                     "session_id": str(self.conversation.session.id),
                     "message_id": clarification_message.id,
-                    "show_clarification": True,
+                    "show_clarification": False,
                     "timestamp": clarification_message.created_at.isoformat(),
                 }))
  
@@ -299,6 +299,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     "message_id": continuation_message.id,
                     # Frontend renders below this:
                     # "— or —\nStart a new chat"
+                    "show_clarification": False,
                     "show_new_chat_option": True,
                     "timestamp": continuation_message.created_at.isoformat(),
                 }))
