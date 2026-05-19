@@ -448,3 +448,42 @@ def _should_send_to_user(user, notif_type, preferences):
     
     logger.debug(f"  ℹ️ User {user.id} preference for {notif_type}: {is_enabled}")
     return is_enabled
+
+
+@shared_task
+def send_websocket_notification(notification_id):
+    """Send real-time notification via WebSocket to the user"""
+    logger.info(f"🔌 Starting send_websocket_notification for notification_id: {notification_id}")
+    
+    try:
+        from .models import Notification
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        
+        notification = Notification.objects.get(id=notification_id)
+        channel_layer = get_channel_layer()
+        
+        group_name = f"notifications_{notification.user.id}"
+        
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {
+                "type": "notification_message",
+                "data": {
+                    "id": notification.id,
+                    "title": notification.title,
+                    "message": notification.message,
+                    "notification_type": notification.notification_type,
+                    "data": notification.data,
+                    "created_at": str(notification.created_at),
+                }
+            }
+        )
+        
+        logger.info(f"✅ WebSocket notification sent to user {notification.user.id}")
+        
+    except Notification.DoesNotExist:
+        logger.error(f"❌ Notification {notification_id} not found")
+    except Exception as e:
+        logger.error(f"❌ WebSocket notification error: {e}")
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
