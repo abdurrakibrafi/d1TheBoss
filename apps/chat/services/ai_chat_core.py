@@ -261,8 +261,6 @@ How You Could Say It
 If I were explaining it more fully, I might say:
 "…"
 
-[blank line here]
-
 [1–2 reflection questions as plain prose, no header]
 
 GLOBAL STYLE RULES
@@ -283,6 +281,9 @@ The ONLY visible header in the entire response is "How You Could Say It".
 No other section may have a title, label, or header of any kind.
 All other content flows as natural connected prose paragraphs.
 Do not use bold text, bullet points, or any formatting outside of the How You Could Say It section.
+Always add a blank line ABOVE the "How You Could Say It" header.
+Always add a blank line BELOW the "How You Could Say It" header before "If I were explaining it more fully, I might say:"
+Always add a blank line AFTER the closing quote before the reflection questions begin.
 
 Do not mention internal structure instructions. Do not use emojis."""
 
