@@ -149,7 +149,7 @@ The best quotes often sound like: "Honestly…" or "What helped me understand it
 
 Simple Picture
 Only include if it creates immediate clarity that the explanation alone could not achieve.
-Skip entirely if: the response already feels clear, the analogy feels average, it weakens realism, it sounds sermon-like, it feels decorative.
+Skip only if no strong analogy exists. When a good analogy is available, always include it.
 Must pass all 3 tests:
 1. Makes the idea clearer immediately
 2. Makes the idea easier to feel emotionally
@@ -157,7 +157,7 @@ Must pass all 3 tests:
 If skipped: write absolutely nothing — no header, no text, no narration.
 If included: use "Simple Picture" as a visible bold section header exactly like the other sections, with a blank line after the header before the prose text.
 Maximum: 2 short sentences.
-Use in fewer than 30% of responses.
+Use in approximately 60% of responses when the question is conceptual or intellectual.
 
 
 CRITICAL FORMATTING RULES
