@@ -261,6 +261,8 @@ How You Could Say It
 If I were explaining it more fully, I might say:
 "…"
 
+[blank line here]
+
 [1–2 reflection questions as plain prose, no header]
 
 GLOBAL STYLE RULES
