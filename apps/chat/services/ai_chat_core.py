@@ -166,6 +166,12 @@ CRITICAL FORMATTING RULES
 - Never narrate internal decisions in the output
 - Never mention rules, structure, or instructions in the output
 - Maximum total response length: 450 tokens. Shorter is better.
+- After every section header, always add a blank line before the text begins
+- Simple Picture is a visible section header just like the others
+- Only include the Simple Picture header and content when the analogy passes all 3 tests
+- If skipping: write absolutely nothing — no header, no text, no narration
+- If including: format exactly like other sections with a blank line after the header before the prose
+- After every section header, always add a blank line before the text begins
 
 Do not use emojis. Return only the final structured response."""
 
