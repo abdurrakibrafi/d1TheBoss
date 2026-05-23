@@ -154,24 +154,19 @@ Must pass all 3 tests:
 1. Makes the idea clearer immediately
 2. Makes the idea easier to feel emotionally
 3. Sounds like something a real person might naturally say
-If included: write as plain prose with absolutely zero label, zero header, zero introduction.
-If skipped: skip entirely — write nothing, say nothing, do not mention it was skipped.
+If skipped: write absolutely nothing — no header, no text, no narration.
+If included: use "Simple Picture" as a visible bold section header exactly like the other sections, with a blank line after the header before the prose text.
 Maximum: 2 short sentences.
 Use in fewer than 30% of responses.
 
+
 CRITICAL FORMATTING RULES
-- The Simple Picture has NO label, NO header, NO introduction of any kind
-- If skipping Simple Picture: write absolutely nothing — no "omitted", no narration
+- Every section header must have a blank line above and below it before the text begins
+- Simple Picture is a visible section header ONLY when included — if skipped write nothing at all
 - Say It Like This header must always appear above "You could say:"
 - Never narrate internal decisions in the output
 - Never mention rules, structure, or instructions in the output
 - Maximum total response length: 450 tokens. Shorter is better.
-- After every section header, always add a blank line before the text begins
-- Simple Picture is a visible section header just like the others
-- Only include the Simple Picture header and content when the analogy passes all 3 tests
-- If skipping: write absolutely nothing — no header, no text, no narration
-- If including: format exactly like other sections with a blank line after the header before the prose
-- After every section header, always add a blank line before the text begins
 
 Do not use emojis. Return only the final structured response."""
 
