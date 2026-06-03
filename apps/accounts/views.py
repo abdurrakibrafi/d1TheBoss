@@ -56,7 +56,6 @@ class InitiateRegistrationView(BaseResponseMixin, generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
 
         if not serializer.is_valid():
-            # Handle basic validation errors (like invalid email format)
             return self.success_response(
                 data={"email": request.data.get("email", ""), "is_sent": False},
                 message="Invalid email format.",
@@ -67,14 +66,11 @@ class InitiateRegistrationView(BaseResponseMixin, generics.GenericAPIView):
         user, message = serializer.send_registration_otp(email)
 
         if user is None:
-            # User already exists
             return self.success_response(
                 data={"email": email, "is_sent": False},
                 message=message,
                 status_code=status.HTTP_200_OK,
             )
-
-        # Success case
         return self.success_response(
             data={"email": email, "user_id": user.id, "is_sent": True},
             message=message,
@@ -92,8 +88,6 @@ class CompleteRegistrationView(BaseResponseMixin, generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
 
         user = serializer.save()
-
-        # Generate tokens
         refresh = RefreshToken.for_user(user)
 
         return self.success_response(
@@ -376,8 +370,6 @@ class SocialAuthView(BaseResponseMixin, generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
 
         user = serializer.create_or_login_user()
-
-        # Generate tokens
         refresh = RefreshToken.for_user(user)
 
         return self.success_response(
@@ -409,8 +401,6 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
         try:
             profile = self.get_object()
             serializer = self.get_serializer(profile)
-
-            # Include current user email in response
             data = serializer.data
             data["email"] = request.user.email
 
@@ -430,7 +420,6 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
             if serializer.is_valid():
                 updated_profile = serializer.save()
                 print("🔥 NOTIFICATION BLOCK REACHED", flush=True)
-                 # ─── Notification with logging ────────────────────────────
                 try:
                     logger.info(f"📱 Sending profile update notification to user {request.user.id} ({request.user.email})")
                     
@@ -446,13 +435,10 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
                     logger.info(f"✅ Notification sent successfully to user {request.user.id}")
                     
                 except Exception as notif_error:
-                    # Don't break profile update if notification fails
                     print(f"❌ NOTIF ERROR: {notif_error}", flush=True)
                     logger.error(f"❌ Notification failed for user {request.user.id}: {str(notif_error)}")
-                # ────────────────────────────
 
                 if (
-                # Check if email change was requested
                     "email" in request.data
                     and request.data["email"] != request.user.email
                 ):
@@ -466,9 +452,6 @@ class ProfileUpdateView(BaseResponseMixin, generics.GenericAPIView):
                         message="Profile updated. Please verify your new email address.",
                         action_required="EMAIL_VERIFICATION",
                     )
-                
-
-                # Regular profile update
                 response_data = self.get_serializer(updated_profile).data
                 response_data["email"] = request.user.email
 
@@ -547,8 +530,6 @@ class VerifyEmailChangeView(BaseResponseMixin, generics.GenericAPIView):
                     return self.bad_request_response(
                         message="OTP is invalid or expired", error_code="INVALID_OTP"
                     )
-
-                # Get profile and update email
                 profile = request.user.profile
                 if not profile.temp_email:
                     return self.bad_request_response(
@@ -558,16 +539,10 @@ class VerifyEmailChangeView(BaseResponseMixin, generics.GenericAPIView):
 
                 old_email = request.user.email
                 new_email = profile.temp_email
-
-                # Update user email
                 request.user.email = new_email
                 request.user.save()
-
-                # Clear temp email
                 profile.temp_email = None
                 profile.save()
-
-                # Mark OTP as used
                 otp.is_used = True
                 otp.save()
 
@@ -601,13 +576,9 @@ class ResendEmailChangeOTPView(BaseResponseMixin, generics.GenericAPIView):
                 return self.bad_request_response(
                     message="No pending email change found",
                 )
-
-            # Invalidate old OTPs
             OTP.objects.filter(
                 user=request.user, purpose="email_change", is_used=False
             ).update(is_used=True)
-
-            # Generate new OTP
             otp_code = str(random.randint(1000, 9999))
             OTP.objects.create(
                 user=request.user,
@@ -639,12 +610,8 @@ class CancelEmailChangeView(BaseResponseMixin, generics.GenericAPIView):
                 return self.bad_request_response(
                     message="No pending email change found",
                 )
-
-            # Clear temp email
             profile.temp_email = None
             profile.save()
-
-            # Invalidate OTPs
             OTP.objects.filter(
                 user=request.user, purpose="email_change", is_used=False
             ).update(is_used=True)

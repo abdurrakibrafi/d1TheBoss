@@ -14,9 +14,6 @@ from apps.onboarding.models import (
     BibleVersionOption,
     BibleVersion,
 )
-
-
-# 01. Journey Reason Options
 @admin.register(JourneyReasonOption)
 class JourneyReasonOptionAdmin(admin.ModelAdmin):
     list_display = ["option", "is_active", "created_at"]
@@ -29,9 +26,6 @@ class JourneyReasonAdmin(admin.ModelAdmin):
     list_display = ["user", "journey_reason", "created_at"]
     search_fields = ["user__email", "journey_reason__option"]
     list_filter = ["journey_reason"]
-
-
-# 03. Denomination Options
 @admin.register(DenominationOption)
 class DenominationOptionAdmin(admin.ModelAdmin):
     list_display = ["name", "is_active", "created_at"]
@@ -44,9 +38,6 @@ class DenominationAdmin(admin.ModelAdmin):
     list_display = ["user", "denomination_option", "name", "created_at"]
     search_fields = ["user__email", "name"]
     list_filter = ["denomination_option"]
-
-
-# 05. Faith Goal Questions & Options
 @admin.register(FaithGoalQuestion)
 class FaithGoalQuestionAdmin(admin.ModelAdmin):
     list_display = ["question", "is_active", "created_at"]
@@ -67,9 +58,6 @@ class FaithGoalAdmin(admin.ModelAdmin):
     list_display = ["user", "faith_goal_option", "text", "created_at"]
     search_fields = ["user__email", "text"]
     list_filter = ["faith_goal_option"]
-
-
-# 08. Tone Preference Options
 @admin.register(TonePreferenceOption)
 class TonePreferenceOptionAdmin(admin.ModelAdmin):
     list_display = ["title", "description", "is_active"]
@@ -82,9 +70,6 @@ class TonePreferenceAdmin(admin.ModelAdmin):
     list_display = ["user", "tone_preference_option"]
     search_fields = ["user__email", "tone_preference_option__option_title"]
     list_filter = ["tone_preference_option"]
-
-
-# 10. Bible Familiarity
 @admin.register(BibleFamiliarityOption)
 class BibleFamiliarityOptionAdmin(admin.ModelAdmin):
     list_display = ["label", "text1", "text2", "is_active"]
@@ -97,9 +82,6 @@ class BibleFamiliarityAdmin(admin.ModelAdmin):
     list_display = ["user", "bible_familiarity_option", "text"]
     search_fields = ["user__email", "text"]
     list_filter = ["bible_familiarity_option"]
-
-
-# 12. Bible Versions
 @admin.register(BibleVersionOption)
 class BibleVersionOptionAdmin(admin.ModelAdmin):
     list_display = ["title", "subtitle", "is_active"]

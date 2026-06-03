@@ -19,7 +19,6 @@ class UserStreakSerializer(serializers.ModelSerializer):
             'current_streak',
             'longest_streak',
             'last_checkin_date',
-            # NEW weekly streak fields
             'current_weekly_streak',
             'longest_weekly_streak',
             'has_red_flame',

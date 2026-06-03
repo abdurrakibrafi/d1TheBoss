@@ -23,17 +23,11 @@ def get_week_boundaries_for_date(d):
 
 class UserStreak(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='streak')
-    
-    # Daily streak
     current_streak = models.IntegerField(default=0)
     longest_streak = models.IntegerField(default=0)
     last_checkin_date = models.DateField(null=True, blank=True)
-
-    # Weekly check-in streak (NEW)
-    # Consecutive completed weekly check-ins
     current_weekly_streak = models.IntegerField(default=0)
     longest_weekly_streak = models.IntegerField(default=0)
-    # True when current_weekly_streak >= 2 → show red flame
     has_red_flame = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -100,8 +94,6 @@ class UserWeeklyCheckin(models.Model):
     week_start = models.DateField(blank=True, null=True)
     week_end = models.DateField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='available')
-
-    # Legacy fields
     is_available = models.BooleanField(default=True)
     is_completed = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -139,12 +131,6 @@ class UserWeeklyCheckinResponse(models.Model):
 
     def __str__(self):
         return f"Week {self.weekly_checkin.week_number} - Q{self.question.question_order}"
-
-
-# ─── Badge System ────────────────────────────────────────────────────────────────
-
-# Correct milestones per client doc
-# 1, 2, 3, 4, 12, 24, 52 completed weeks
 BADGE_MILESTONES = [1, 2, 3, 4, 12, 24, 52]
 
 
@@ -185,9 +171,6 @@ class UserAppBadge(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.badge_template.title if self.badge_template else 'Unknown'}"
-
-
-# Keep for backward compat
 class UserBadge(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='badges', blank=True, null=True)
     weeks_completed = models.IntegerField(blank=True, null=True)

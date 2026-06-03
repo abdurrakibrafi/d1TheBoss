@@ -1,4 +1,3 @@
-# Fixed test data generation views
 
 import random
 from django.db import transaction
@@ -30,7 +29,6 @@ class GenerateTestDataView(BaseResponseMixin, APIView):
             current_week_start = today - timedelta(days=today.weekday())
             
             with transaction.atomic():
-                # Clear existing data if requested
                 if clear_existing:
                     UserGoal.objects.filter(user=user).delete()
                     ChapterRead.objects.filter(user=user).delete()
@@ -42,8 +40,6 @@ class GenerateTestDataView(BaseResponseMixin, APIView):
                 for i in range(weeks_to_generate):
                     week_start = current_week_start - timedelta(weeks=i)
                     week_end = week_start + timedelta(days=6)
-                    
-                    # Skip if goals already exist for this week (unless clearing)
                     if not clear_existing and UserGoal.objects.filter(user=user, week_start=week_start).exists():
                         continue
                     
@@ -53,8 +49,6 @@ class GenerateTestDataView(BaseResponseMixin, APIView):
                         'is_current_week': i == 0,
                         'goals': []
                     }
-                    
-                    # Generate realistic fake data for each goal type
                     goal_configs = [
                         {
                             'goal_type': 'scripture',
@@ -75,14 +69,9 @@ class GenerateTestDataView(BaseResponseMixin, APIView):
                     
                     for config in goal_configs:
                         target = config['target_count']
-                        # Calculate current count based on completion rate
                         current_count = int(target * config['completion_rate'])
-                        
-                        # Add some randomness but don't exceed target
                         if current_count < target:
                             current_count = min(target, current_count + random.randint(0, 3))
-                        
-                        # Create the goal
                         goal = UserGoal.objects.create(
                             user=user,
                             goal_type=config['goal_type'],
@@ -91,11 +80,7 @@ class GenerateTestDataView(BaseResponseMixin, APIView):
                             current_count=current_count,
                             completed=current_count >= target
                         )
-                        
-                        # Create corresponding activity records (simplified - no custom timestamps)
                         self._create_activity_records(user, config['goal_type'], current_count)
-                        
-                        # Add to response data
                         week_data['goals'].append({
                             'goal_type': goal.goal_type,
                             'goal_display': goal.get_goal_type_display(),
@@ -130,7 +115,6 @@ class GenerateTestDataView(BaseResponseMixin, APIView):
             timestamp = int(time.time() * 1000) + i  # Simple unique timestamp
             
             if goal_type == 'scripture':
-                # Create without custom created_at - let Django handle it
                 ChapterRead.objects.create(
                     user=user,
                     bible_id='bible',
@@ -165,8 +149,6 @@ class ClearTestDataView(BaseResponseMixin, APIView):
                 chapters_deleted = ChapterRead.objects.filter(user=user).count()
                 conversations_deleted = ConversationInteraction.objects.filter(user=user).count()
                 shares_deleted = ShareActivity.objects.filter(user=user).count()
-                
-                # Delete all data
                 UserGoal.objects.filter(user=user).delete()
                 ChapterRead.objects.filter(user=user).delete()
                 ConversationInteraction.objects.filter(user=user).delete()
@@ -198,10 +180,7 @@ class QuickTestDataView(BaseResponseMixin, APIView):
             user = request.user
             today = timezone.now().date()
             current_week_start = today - timedelta(days=today.weekday())
-            
-            # Predefined test scenarios
             test_scenarios = [
-                # Current week - partial progress
                 {
                     'week_offset': 0,
                     'goals': [
@@ -210,7 +189,6 @@ class QuickTestDataView(BaseResponseMixin, APIView):
                         {'type': 'share_faith', 'target': 10, 'current': 7}
                     ]
                 },
-                # Last week - good performance
                 {
                     'week_offset': 1,
                     'goals': [
@@ -219,7 +197,6 @@ class QuickTestDataView(BaseResponseMixin, APIView):
                         {'type': 'share_faith', 'target': 10, 'current': 9}
                     ]
                 },
-                # 2 weeks ago - completed all goals
                 {
                     'week_offset': 2,
                     'goals': [
@@ -228,7 +205,6 @@ class QuickTestDataView(BaseResponseMixin, APIView):
                         {'type': 'share_faith', 'target': 7, 'current': 8}
                     ]
                 },
-                # 3 weeks ago - low performance
                 {
                     'week_offset': 3,
                     'goals': [
@@ -237,7 +213,6 @@ class QuickTestDataView(BaseResponseMixin, APIView):
                         {'type': 'share_faith', 'target': 10, 'current': 2}
                     ]
                 },
-                # 4 weeks ago - mixed performance
                 {
                     'week_offset': 4,
                     'goals': [
@@ -253,8 +228,6 @@ class QuickTestDataView(BaseResponseMixin, APIView):
             with transaction.atomic():
                 for scenario in test_scenarios:
                     week_start = current_week_start - timedelta(weeks=scenario['week_offset'])
-                    
-                    # Skip if already exists
                     if UserGoal.objects.filter(user=user, week_start=week_start).exists():
                         continue
                     
@@ -293,9 +266,6 @@ class QuickTestDataView(BaseResponseMixin, APIView):
             
         except Exception as exc:
             return self.handle_exception(exc)
-
-
-# Alternative: Simple test data without activity records
 class SimpleTestDataView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
 
@@ -312,12 +282,8 @@ class SimpleTestDataView(BaseResponseMixin, APIView):
             with transaction.atomic():
                 for i in range(weeks_to_create):
                     week_start = current_week_start - timedelta(weeks=i)
-                    
-                    # Skip if already exists
                     if UserGoal.objects.filter(user=user, week_start=week_start).exists():
                         continue
-                    
-                    # Create goals with random data
                     goals_data = [
                         {
                             'goal_type': 'scripture',
@@ -338,7 +304,6 @@ class SimpleTestDataView(BaseResponseMixin, APIView):
                     
                     week_result = []
                     for goal_data in goals_data:
-                        # Ensure current doesn't exceed target too much
                         current = min(goal_data['current_count'], goal_data['target_count'] + 5)
                         
                         goal = UserGoal.objects.create(

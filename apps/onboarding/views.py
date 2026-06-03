@@ -97,9 +97,6 @@ class OnboardingOptionsView(BaseResponseMixin, generics.GenericAPIView):
             return self.handle_exception(exc)
 
 
-# USER SELECTION VIEWS (GET/POST)
-
-
 class JourneyReasonView(BaseResponseMixin, generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = JourneyReasonSerializer
@@ -121,7 +118,6 @@ class JourneyReasonView(BaseResponseMixin, generics.GenericAPIView):
 
     def post(self, request):
         try:
-            # Delete existing first (one choice only)
             JourneyReason.objects.filter(user=request.user).delete()
 
             serializer = self.serializer_class(
@@ -196,8 +192,6 @@ class FaithGoalView(BaseResponseMixin, generics.GenericAPIView):
             )
             if serializer.is_valid():
                 serializer.save()
-                
-                # ADD THIS: Update user's goal based on new faith goal selections
                 try:
                     from apps.goal.models import UserGoal  # Import UserGoal
                     goal_updated = UserGoal.update_goal_for_preference_change(request.user)
@@ -379,8 +373,6 @@ class OnboardingStatusView(BaseResponseMixin, generics.GenericAPIView):
     def get(self, request):
         try:
             profile = request.user.profile
-
-            # Calculate progress percentage based on current step
             progress_percentage = (
                 (profile.onboarding_step / 7) * 100 if profile.onboarding_step else 0
             )
@@ -426,14 +418,10 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
 
     def get(self, request):
         user = request.user
-        
-        # Get all faith goals for the user grouped by question
         faith_goals_data = []
         user_faith_goals = FaithGoal.objects.filter(user=user).select_related(
             'faith_goal_option__faith_goal_question'
         )
-        
-        # Group by question
         questions_with_selections = {}
         for goal in user_faith_goals:
             question = goal.faith_goal_option.faith_goal_question
@@ -445,8 +433,6 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
                     'user_text': goal.text,
                     'created_at': goal.created_at
                 }
-        
-        # Now build the complete structure with all options
         from apps.onboarding.models import FaithGoalQuestion
         
         for question in FaithGoalQuestion.objects.filter(is_active=True).prefetch_related('faithgoaloption_set'):
@@ -454,14 +440,10 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
             selected_option_id = None
             user_text = ""
             created_at = None
-            
-            # Check if user has selection for this question
             if question in questions_with_selections:
                 selected_option_id = questions_with_selections[question]['selected_option_id']
                 user_text = questions_with_selections[question]['user_text']
                 created_at = questions_with_selections[question]['created_at']
-            
-            # Build options list with is_selected flag
             for option in question.faithgoaloption_set.filter(is_active=True):
                 options.append({
                     'id': option.id,
@@ -492,12 +474,8 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
         user_goal_obj = UserGoal.objects.filter(user=user).first()
         print(user_goal_obj)
         print(goal_preference_obj)
-
-        # Get the current goal type (either from preference or calculated from faith goals)
         from apps.goal.utils import get_user_primary_goal_type
         current_goal_type = get_user_primary_goal_type(user)
-        
-        # Get goal display name
         goal_display_map = {
             'scripture': 'Scripture Knowledge',
             'conversation': 'Confidence Goal', 
@@ -578,8 +556,6 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
         user = request.user
         updated = {}
         errors = {}
-
-        # Helper function to update a model
         def update_model(field_name, model_class, serializer_class):
             if field_name in request.data:
                 try:
@@ -597,8 +573,6 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
                         errors[field_name] = serializer.errors
                 except Exception as e:
                     errors[field_name] = [f"Error updating {field_name}: {str(e)}"]
-
-        # Special handling for faith_goal (multiple goals)
         if "faith_goal" in request.data:
             try:
                 serializer = BulkFaithGoalSerializer(
@@ -613,34 +587,21 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
                     errors["faith_goal"] = serializer.errors
             except Exception as e:
                 errors["faith_goal"] = [f"Error updating faith_goal: {str(e)}"]
-
-        # Update other sections
         update_model("goal_preference", UserGoalPreference, UserGoalPreferenceSerializer)
         update_model("journey_reason", JourneyReason, JourneyReasonSerializer)
         update_model("denomination", Denomination, DenominationSerializer)
         update_model("tone_preference", TonePreference, TonePreferenceSerializer)
         update_model("bible_familiarity", BibleFamiliarity, BibleFamiliaritySerializer)
         update_model("bible_version", BibleVersion, BibleVersionSerializer)
-
-        # FIXED: Trigger goal update for ANY update that affects goals
         if updated and not errors:
             goal_affecting_fields = ['goal_preference', 'faith_goal']
             if any(field in updated for field in goal_affecting_fields):
-                # IMPORTANT: If faith_goal was updated but no goal_preference exists, 
-                # temporarily clear/recalculate the goal preference
                 if 'faith_goal' in updated and 'goal_preference' not in updated:
-                    # Force recalculation by temporarily removing preference if it exists
                     existing_preference = UserGoalPreference.objects.filter(user=user).first()
                     if existing_preference:
-                        # Store the old preference type
                         old_preference_type = existing_preference.goal_type
-                        # Delete it temporarily so get_user_primary_goal_type calculates from faith goals
                         existing_preference.delete()
-                        
-                        # Now update the goal (this will calculate from faith goals)
                         goal_updated = UserGoal.update_goal_for_preference_change(user)
-                        
-                        # Recreate the preference with the new calculated type
                         from apps.goal.utils import get_user_primary_goal_type
                         new_goal_type = get_user_primary_goal_type(user)
                         UserGoalPreference.objects.create(user=user, goal_type=new_goal_type)
@@ -648,12 +609,10 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
                         if goal_updated[1]:  # If goal was actually updated
                             updated['goal_updated'] = True
                     else:
-                        # No existing preference, just update goal
                         goal_updated = UserGoal.update_goal_for_preference_change(user)
                         if goal_updated[1]:
                             updated['goal_updated'] = True
                 else:
-                    # Normal goal preference update
                     goal_updated = UserGoal.update_goal_for_preference_change(user)
                     if goal_updated[1]:
                         updated['goal_updated'] = True
@@ -675,8 +634,6 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
         user_faith_goals = FaithGoal.objects.filter(user=user).select_related(
             'faith_goal_option__faith_goal_question'
         )
-        
-        # Group by question
         questions_with_selections = {}
         for goal in user_faith_goals:
             question = goal.faith_goal_option.faith_goal_question
@@ -688,8 +645,6 @@ class UserOnboardingDataView(BaseResponseMixin, generics.GenericAPIView):
                     'user_text': goal.text,
                     'created_at': goal.created_at
                 }
-        
-        # Build complete structure
         from apps.onboarding.models import FaithGoalQuestion
         
         for question in FaithGoalQuestion.objects.filter(is_active=True).prefetch_related('faithgoaloption_set'):

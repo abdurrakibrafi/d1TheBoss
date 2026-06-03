@@ -1,4 +1,3 @@
-# urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -27,7 +26,6 @@ from .views import (
 )
 
 urlpatterns = [
-    # Authentication endpoints
     path(
         "register/initiate/",
         InitiateRegistrationView.as_view(),
@@ -43,7 +41,6 @@ urlpatterns = [
     path("login/", LoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(), name="logout"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-    # Password management
     path(
         "password/reset-request/",
         PasswordResetRequestView.as_view(),
@@ -60,7 +57,6 @@ urlpatterns = [
         name="password-reset-confirm-view",
     ),
     path("password/change/", ChangePasswordView.as_view(), name="password-change"),
-    # Profile management
     path("profile/update/", ProfileUpdateView.as_view(), name="profile-update"),
     path(
         "profile/verify-email-change/",
@@ -78,14 +74,7 @@ urlpatterns = [
         name="cancel-email-change",
     ),
     path("parmanent/delete/", ParmanentAccountDeleteView.as_view(), name="parmanent-delete"),
-
-    # Social auth
     path("social-auth/", SocialAuthView.as_view(), name="social-auth"),
-    # Commented out endpoints (uncomment when needed)
-    # path("google/login/", GoogleLogin.as_view(), name="google_login"),
-    # path("apple/login/", AppleLogin.as_view(), name="apple_login"),
-    # path("account/delete/", AccountSoftDeleteView.as_view(), name="account-delete"),
-    # path("account/restore/", AccountRestoreView.as_view(), name="account-restore"),
 ]
 
 

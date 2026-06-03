@@ -8,15 +8,11 @@ router.register(r'fcm-tokens', views.FCMTokenViewSet, basename='fcm-tokens')
 
 urlpatterns = [
     path('', include(router.urls)),
-    
-    # Existing endpoints
     path('send/', views.SendNotificationView.as_view(), name='send-notification'),
     path('preferences/', views.NotificationPreferencesView.as_view(), name='notification-preferences'),
     path('users/', views.user_list_for_notifications, name='user-list-notifications'),
     path('delete/<int:notification_id>/', views.delete_notification, name='delete-notification'),
     path('bulk-delete/', views.bulk_delete_notifications, name='bulk-delete-notifications'),
-
-    # admin existing endpoints...
     path('admin/send-immediate/', views.send_immediate_notification, name='admin-send-immediate'),
     path('admin/schedule/', views.schedule_notification, name='admin-schedule-notification'),
     path('admin/scheduled/<int:notification_id>/cancel/', views.cancel_scheduled_notification, name='admin-cancel-scheduled'),

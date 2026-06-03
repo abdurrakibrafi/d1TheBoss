@@ -28,19 +28,12 @@ class ConversationManager:
                 return session
             except ChatSession.DoesNotExist:
                 pass
-
-        # Get user's onboarding data
         user_context = self._get_user_spiritual_context()
-        
-        # Create session title based on user's journey
         title = self._generate_session_title(user_context)
-        
-        # Create new session with user's onboarding context
         session = ChatSession.objects.create(
             user=self.user,
             title=title,
             context_snapshot=user_context,
-            # Link onboarding data
             journey_reason=self._get_user_journey_reason(),
             denomination=self._get_user_denomination(),
             faith_goal=self._get_user_faith_goal(),
@@ -75,27 +68,19 @@ class ConversationManager:
             'user_id': self.user.id,
             'timestamp': timezone.now().isoformat(),
         }
-        
-        # Journey Reason
         journey_reason = self._get_user_journey_reason()
         if journey_reason:
             context['journey_reason'] = journey_reason.journey_reason.option
             context['journey_reason_id'] = journey_reason.id
-        
-        # Denomination
         denomination = self._get_user_denomination()
         if denomination:
             context['denomination'] = denomination.denomination_option.name if denomination.denomination_option else denomination.name
             context['denomination_id'] = denomination.id
-        
-        # Faith Goals
         faith_goal = self._get_user_faith_goal()
         if faith_goal:
             context['faith_goal'] = faith_goal.faith_goal_option.option if faith_goal.faith_goal_option else faith_goal.text
             context['faith_goal_question'] = faith_goal.faith_goal_option.faith_goal_question.question if faith_goal.faith_goal_option else None
             context['faith_goal_id'] = faith_goal.id
-        
-        # Tone Preference
         tone_preference = self._get_user_tone_preference()
         if tone_preference:
             context['tone_preference'] = {
@@ -105,8 +90,6 @@ class ConversationManager:
                 'quote': tone_preference.tone_preference_option.quote,
             }
             context['tone_preference_id'] = tone_preference.id
-        
-        # Bible Familiarity
         bible_familiarity = self._get_user_bible_familiarity()
         if bible_familiarity:
             option = bible_familiarity.bible_familiarity_option
@@ -118,8 +101,6 @@ class ConversationManager:
                 'custom_text': bible_familiarity.text,
             }
             context['bible_familiarity_id'] = bible_familiarity.id
-        
-        # Bible Version
         bible_version = self._get_user_bible_version()
         if bible_version:
             context['bible_version'] = {
@@ -180,13 +161,10 @@ class ConversationManager:
             content=content,
             is_user=is_user,
             ai_metadata=ai_metadata or {},
-            # AI-specific fields
             model_used=ai_metadata.get('model_used', '') if ai_metadata else '',
             tokens_consumed=ai_metadata.get('tokens_used', 0) if ai_metadata else 0,
             response_time=ai_metadata.get('response_time', 0.0) if ai_metadata else 0.0,
         )
-        
-        # Update session counters
         self.session.message_count += 1
         if ai_metadata:
             self.session.tokens_used += ai_metadata.get('tokens_used', 0)
@@ -229,7 +207,6 @@ class ConversationManager:
 
     def end_session(self):
         """End conversation session"""
-        # Refresh from DB to get latest is_saved value
         self.session.refresh_from_db()
         print(f"DEBUG end_session called: id={self.session.id}, is_saved={self.session.is_saved}")
         if not self.session.is_saved:

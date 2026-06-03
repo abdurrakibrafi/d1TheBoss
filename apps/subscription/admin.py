@@ -72,15 +72,9 @@ class UserSubscriptionAdmin(admin.ModelAdmin):
         queryset = super().get_queryset(request)
         queryset = queryset.select_related('user', 'subscription_plan')
         return queryset
-
-
-# Optional: Custom admin dashboard
 class SubscriptionDashboard(admin.AdminSite):
     site_header = "Subscription Management Dashboard"
     site_title = "Subscription Admin"
     index_title = "Subscription Management"
-
-
-# Register your models with the admin
 admin.site.register(SubscriptionPlan, SubscriptionPlanAdmin)
 admin.site.register(UserSubscription, UserSubscriptionAdmin)

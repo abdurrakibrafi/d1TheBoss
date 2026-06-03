@@ -1,4 +1,3 @@
-# services/stripe_service.py
 import stripe
 from django.conf import settings
 from apps.subscription.models import UserSubscription, SubscriptionPlan
@@ -81,8 +80,6 @@ class StripeService:
         """Update subscription to a new price/plan"""
         try:
             subscription = stripe.Subscription.retrieve(subscription_id)
-            
-            # Create subscription update parameters
             params = {
                 'items': [{
                     'id': subscription['items']['data'][0].id,

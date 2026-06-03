@@ -78,7 +78,6 @@ class FCMTokenViewSet(BaseResponseMixin, viewsets.ModelViewSet):
         device_type = serializer.validated_data['device_type']
 
         if user:
-            # Check if this exact token already exists
             existing_token = FCMToken.objects.filter(
                 user=user,
                 token=token,
@@ -86,18 +85,14 @@ class FCMTokenViewSet(BaseResponseMixin, viewsets.ModelViewSet):
             ).first()
 
             if existing_token:
-                # Just update it to active
                 existing_token.is_active = True
                 existing_token.save()
                 return existing_token
             else:
-                # Only deactivate old tokens if we're creating a genuinely new one
                 FCMToken.objects.filter(
                     user=user,
                     device_type=device_type
                 ).exclude(token=token).update(is_active=False)
-
-        # Now the serializer can actually set is_active=True
         return serializer.save(user=user, is_active=True)
 
 class SendNotificationView(BaseResponseMixin, APIView):
@@ -174,7 +169,6 @@ def send_notification_to_all(request):
     recipient = request.data.get('recipient', 'all')  # 'all' or user_email
 
     if recipient == 'all':
-        # Create notification for all users
         users = User.objects.filter(is_active=True)
         for user in users:
             Notification.objects.create(
@@ -186,7 +180,6 @@ def send_notification_to_all(request):
             )
         return Response({'message': f'Notification sent to {users.count()} users'})
     else:
-        # Send to specific user
         try:
             user = User.objects.get(email=recipient)
             Notification.objects.create(
@@ -236,7 +229,6 @@ def user_list_for_notifications(request):
 def delete_notification(request, notification_id):
     """Delete a notification"""
     try:
-        # Try to find in ScheduledNotification first
         try:
             notification = ScheduledNotification.objects.get(
                 id=notification_id,
@@ -249,8 +241,6 @@ def delete_notification(request, notification_id):
             })
         except ScheduledNotification.DoesNotExist:
             pass
-
-        # If not found, try Notification model
         try:
             notification = Notification.objects.get(
                 id=notification_id,
@@ -283,8 +273,6 @@ def bulk_delete_notifications(request):
             return Response({'error': 'No notification IDs provided'}, status=400)
 
         deleted_count = 0
-
-        # Delete from ScheduledNotification
         scheduled_count = ScheduledNotification.objects.filter(
             id__in=notification_ids,
             created_by__is_staff=True
@@ -294,8 +282,6 @@ def bulk_delete_notifications(request):
             created_by__is_staff=True
         ).delete()
         deleted_count += scheduled_count
-
-        # Delete from Notification
         immediate_count = Notification.objects.filter(
             id__in=notification_ids,
             created_by__is_staff=True
@@ -323,30 +309,22 @@ def schedule_notification(request):
     """
     try:
         data = request.data
-        
-        # Validate required fields
         required_fields = ['title', 'message', 'scheduled_at', 'notification_types', 'recipient_type']
         for field in required_fields:
             if not data.get(field):
                 return Response({
                     'error': f'{field} is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Parse scheduled time
         try:
             scheduled_at = datetime.fromisoformat(data['scheduled_at'].replace('Z', '+00:00'))
         except ValueError:
             return Response({
                 'error': 'Invalid datetime format. Use ISO format: 2024-12-25T10:30:00Z'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Check if scheduled time is in the future
         if scheduled_at <= timezone.now():
             return Response({
                 'error': 'Scheduled time must be in the future'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Create scheduled notification
         scheduled_notification = ScheduledNotification.objects.create(
             title=data['title'],
             message=data['message'],
@@ -356,8 +334,6 @@ def schedule_notification(request):
             data=data.get('data', {}),
             created_by=request.user
         )
-        
-        # Add specific users if recipient_type is 'specific'
         if data['recipient_type'] == 'specific':
             user_ids = data.get('user_ids', [])
             if not user_ids:
@@ -394,8 +370,6 @@ def send_immediate_notification(request):
     """
     try:
         data = request.data
-        
-        # Your existing validation...
         if not all([data.get('title'), data.get('message')]):
             return Response({
                 'error': 'title and message are required'
@@ -403,8 +377,6 @@ def send_immediate_notification(request):
         
         recipient_type = data.get('recipient_type', 'all')
         notification_types = data.get('notification_types', ['push'])
-        
-        # Get target users
         if recipient_type == 'all':
             target_users = User.objects.filter(is_active=True)
         else:
@@ -419,12 +391,9 @@ def send_immediate_notification(request):
             return Response({
                 'error': 'No active users found'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Send notifications and save to Notification table for tracking
         sent_count = 0
         for user in target_users:
             try:
-                # Send using your existing service
                 from apps.notification.services.notification_service import NotificationService
                 NotificationService.send_notification(
                     user_id=user.id,
@@ -433,8 +402,6 @@ def send_immediate_notification(request):
                     notification_types=notification_types,
                     data=data.get('data', {})
                 )
-                
-                # Save to Notification table for tracking
                 for notif_type in notification_types:
                     Notification.objects.create(
                         user=user,
@@ -470,8 +437,6 @@ def scheduled_notifications_list(request):
     Get list of scheduled notifications for admin dashboard
     """
     scheduled_notifications = ScheduledNotification.objects.all()
-    
-    # Add filtering
     status_filter = request.GET.get('status')
     if status_filter:
         scheduled_notifications = scheduled_notifications.filter(status=status_filter)
@@ -525,10 +490,6 @@ def cancel_scheduled_notification(request, notification_id):
             'error': 'Scheduled notification not found'
         }, status=status.HTTP_404_NOT_FOUND)
 
-
-
-# views.py - Add this new unified view
-
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
@@ -546,25 +507,18 @@ def admin_notifications_unified(request):
     Combines ScheduledNotification and Notification data with filtering
     """
     try:
-        # Get query parameters
         search = request.GET.get('search', '')
         status_filter = request.GET.get('status', '')
         notification_type_filter = request.GET.get('notification_type', '')
         date_from = request.GET.get('date_from', '')
         date_to = request.GET.get('date_to', '')
         created_by_filter = request.GET.get('created_by', '')
-        
-        # Base querysets - only admin created notifications
         scheduled_qs = ScheduledNotification.objects.filter(
             created_by__is_staff=True
         ).select_related('created_by')
-        
-        # For immediate notifications - filter by admin users who sent them
         immediate_qs = Notification.objects.filter(
             created_by__is_staff=True
         ).select_related('created_by')
-        
-        # Apply search filter
         if search:
             scheduled_qs = scheduled_qs.filter(
                 Q(title__icontains=search) | Q(message__icontains=search)
@@ -572,17 +526,12 @@ def admin_notifications_unified(request):
             immediate_qs = immediate_qs.filter(
                 Q(title__icontains=search) | Q(message__icontains=search)
             )
-        
-        # Apply status filter
         if status_filter:
             scheduled_qs = scheduled_qs.filter(status=status_filter)
-            # For immediate notifications, map status
             if status_filter == 'sent':
                 immediate_qs = immediate_qs.filter(sent_at__isnull=False)
             elif status_filter == 'pending':
                 immediate_qs = immediate_qs.none()  # Immediate are never pending
-        
-        # Apply notification type filter
         if notification_type_filter:
             scheduled_qs = scheduled_qs.filter(
                 notification_types__contains=[notification_type_filter]
@@ -590,8 +539,6 @@ def admin_notifications_unified(request):
             immediate_qs = immediate_qs.filter(
                 notification_type=notification_type_filter
             )
-        
-        # Apply date filters
         if date_from:
             try:
                 date_from_dt = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
@@ -607,21 +554,13 @@ def admin_notifications_unified(request):
                 immediate_qs = immediate_qs.filter(created_at__lte=date_to_dt)
             except ValueError:
                 pass
-        
-        # Apply created_by filter
         if created_by_filter:
             try:
                 created_by_id = int(created_by_filter)
                 scheduled_qs = scheduled_qs.filter(created_by_id=created_by_id)
-                # For immediate notifications, you'll need to adjust based on your model
-                # immediate_qs = immediate_qs.filter(created_by_id=created_by_id)
             except ValueError:
                 pass
-        
-        # Convert to unified format
         notifications = []
-        
-        # Process scheduled notifications
         for sn in scheduled_qs:
             notifications.append({
                 'id': f"scheduled_{sn.id}",
@@ -646,8 +585,6 @@ def admin_notifications_unified(request):
                 'is_due': sn.scheduled_at <= timezone.now() and sn.status == 'pending' if sn.scheduled_at else False,
                 'data': getattr(sn, 'data', {}),
             })
-        
-        # Process immediate notifications
         for notif in immediate_qs:
             notifications.append({
                 'id': f"immediate_{notif.id}",
@@ -676,11 +613,7 @@ def admin_notifications_unified(request):
                 'is_due': False,
                 'data': notif.data or {},
             })
-        
-        # Sort by created_at (most recent first)
         notifications.sort(key=lambda x: x['created_at'], reverse=True)
-        
-        # Pagination
         page = int(request.GET.get('page', 1))
         per_page = int(request.GET.get('per_page', 20))
         start = (page - 1) * per_page
@@ -688,8 +621,6 @@ def admin_notifications_unified(request):
         
         total_count = len(notifications)
         paginated_notifications = notifications[start:end]
-        
-        # Calculate stats
         stats = {
             'total': total_count,
             'scheduled': len([n for n in notifications if n['type'] == 'scheduled']),
@@ -737,7 +668,6 @@ def admin_notifications_stats(request):
     Get comprehensive stats for admin dashboard
     """
     try:
-        # Stats from ScheduledNotification (admin created)
         scheduled_stats = ScheduledNotification.objects.filter(
             created_by__is_staff=True
         ).aggregate(
@@ -747,24 +677,17 @@ def admin_notifications_stats(request):
             failed_scheduled=Count('id', filter=Q(status='failed')),
             cancelled_scheduled=Count('id', filter=Q(status='cancelled')),
         )
-        
-        # Due notifications
         now = timezone.now()
         due_count = ScheduledNotification.objects.filter(
             created_by__is_staff=True,
             scheduled_at__lte=now,
             status='pending'
         ).count()
-        
-        # Stats from immediate notifications
         immediate_stats = Notification.objects.filter(
-            # Add your admin filter here
         ).aggregate(
             total_immediate=Count('id'),
             sent_immediate=Count('id', filter=Q(sent_at__isnull=False)),
         )
-        
-        # Notification type breakdown for scheduled
         push_count = ScheduledNotification.objects.filter(
             created_by__is_staff=True,
             notification_types__contains=['push']
@@ -779,8 +702,6 @@ def admin_notifications_stats(request):
             created_by__is_staff=True,
             notification_types__contains=['in_app']
         ).count()
-        
-        # Recent activity (last 7 days)
         from datetime import timedelta
         last_week = now - timedelta(days=7)
         
@@ -837,7 +758,6 @@ def admin_creators_list(request):
     Get list of admin users who have created notifications
     """
     try:
-        # Get admins who created scheduled notifications
         admin_users = User.objects.filter(
             is_staff=True,
             created_schedules__isnull=False

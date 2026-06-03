@@ -30,9 +30,6 @@ from apps.notification.services.notification_service import NotificationService
 from apps.goal.models import UserGoal, ConversationInteraction, ShareActivity, ChapterRead
 from apps.checkin.tasks import check_and_award_badges_task
 
-
-# ─── Streak Notification Helper ──────────────────────────────────────────────────
-
 import logging
 logger = logging.getLogger(__name__)
 
@@ -78,9 +75,6 @@ class StreakNotificationService:
             
         except Exception as e:
             logger.error(f"❌ Streak notification failed for user {user.id}: {str(e)}")
-
-
-# ─── Daily Check-In ──────────────────────────────────────────────────────────────
 
 class DailyCheckinAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
@@ -134,17 +128,11 @@ class DailyCheckinAPIView(BaseResponseMixin, APIView):
 
     def _ensure_current_week_exists(self, user):
         week_start, week_end = get_current_week_boundaries()
-
-        # Fix null dates first
         UserWeeklyCheckin.objects.filter(
             user=user, week_start__isnull=True
         ).update(week_start=week_start, week_end=week_end)
-
-        # Guard by week_start — main duplicate prevention
         if UserWeeklyCheckin.objects.filter(user=user, week_start=week_start).exists():
             return
-
-        # Also check if any available week exists
         if UserWeeklyCheckin.objects.filter(user=user, status='available').exists():
             return
 
@@ -158,9 +146,6 @@ class DailyCheckinAPIView(BaseResponseMixin, APIView):
             is_available=True,
             is_completed=False,
         )
-
-
-# ─── Calendar ────────────────────────────────────────────────────────────────────
 
 class CalendarDataAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
@@ -239,9 +224,6 @@ class CalendarDataAPIView(BaseResponseMixin, APIView):
         except Exception as exc:
             return self.handle_exception(exc)
 
-
-# ─── Profile Dashboard ───────────────────────────────────────────────────────────
-
 class ProfileDashboardAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
 
@@ -300,25 +282,19 @@ class ProfileDashboardAPIView(BaseResponseMixin, APIView):
             'streak': streak_data,
             'current_streak': user_streak.current_streak,
             'longest_streak': user_streak.longest_streak,
-            # Weekly streak / red flame
             'current_weekly_streak': user_streak.current_weekly_streak,
             'longest_weekly_streak': user_streak.longest_weekly_streak,
             'has_red_flame': user_streak.has_red_flame,
-            # Badges
             'latest_badge': UserAppBadgeSerializer(latest_badge, context={'request': request}).data if latest_badge else None,
             'badges': badge_data,
             'total_badges_earned': badges.count(),
             'next_badge_progress': next_badge_progress,
-            # Weekly checkin
             'total_completed_weekly_checkins': total_completed,
             'total_missed_weekly_checkins': total_missed,
             'current_week_status': current_week.status if current_week else 'no_record',
             'current_week_available': current_week.status == 'available' if current_week else False,
             'current_goal': current_goal_data,
         })
-
-
-# ─── Weekly Check-In Questions ───────────────────────────────────────────────────
 
 class WeeklyCheckinQuestionsAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
@@ -363,9 +339,6 @@ class WeeklyCheckinQuestionsAPIView(BaseResponseMixin, APIView):
             'questions': serializer.data
         })
 
-
-# ─── Weekly Check-In Submit ──────────────────────────────────────────────────────
-
 class WeeklyCheckinSubmitAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
 
@@ -384,8 +357,6 @@ class WeeklyCheckinSubmitAPIView(BaseResponseMixin, APIView):
             return self.error_response({
                 'error': 'Weekly check-in not available or already completed'
             }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Already has responses — just mark complete
         existing_responses = UserWeeklyCheckinResponse.objects.filter(weekly_checkin=weekly_checkin)
         if existing_responses.exists():
             weekly_checkin.status = 'completed'
@@ -409,19 +380,13 @@ class WeeklyCheckinSubmitAPIView(BaseResponseMixin, APIView):
                     question_id=response_data['question'],
                     selected_option_id=response_data['selected_option']
                 )
-
-            # Mark completed
             weekly_checkin.status = 'completed'
             weekly_checkin.is_completed = True
             weekly_checkin.completed_at = timezone.now()
             weekly_checkin.save()
             weekly_checkin.refresh_from_db()
-
-            # Update weekly streak
             from apps.checkin.tasks import _update_weekly_streak
             updated_streak = _update_weekly_streak(user)
-
-            # Award badges synchronously — get newly awarded list
             newly_awarded = check_and_award_badges_task(user.id)
             if not isinstance(newly_awarded, list):
                 newly_awarded = []
@@ -441,8 +406,6 @@ class WeeklyCheckinSubmitAPIView(BaseResponseMixin, APIView):
                 if latest and 'description' in latest:
                     latest['description'] = format_badge_description(latest['description'])
                 newly_earned_badge = latest
-                
-            # Send notification
             try:
                 StreakNotificationService.send_streak_notification(
                     user,
@@ -455,12 +418,9 @@ class WeeklyCheckinSubmitAPIView(BaseResponseMixin, APIView):
             return self.success_response({
                 'message': 'Weekly check-in completed successfully!',
                 'week_number': weekly_checkin.week_number,
-                # Weekly streak info
                 'current_weekly_streak': updated_streak.current_weekly_streak if updated_streak else 0,
                 'has_red_flame': updated_streak.has_red_flame if updated_streak else False,
-                # Badge popup — frontend shows this as popup if not None
                 'newly_earned_badge': newly_earned_badge,
-                # All newly awarded badges this submission
                 'newly_awarded_badges': newly_awarded,
             }, status=status.HTTP_201_CREATED)
 
@@ -468,9 +428,6 @@ class WeeklyCheckinSubmitAPIView(BaseResponseMixin, APIView):
             return self.error_response({
                 'error': f'Failed to save responses: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-# ─── Weekly Check-In History ─────────────────────────────────────────────────────
 
 class WeeklyCheckinHistoryAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -535,8 +492,6 @@ class WeeklyCheckinHistoryAPIView(APIView):
             total_completed = all_weeks.filter(status='completed').count()
             total_missed = all_weeks.filter(status='missed').count()
             total_available = all_weeks.filter(status='available').count()
-
-            # Get badge earned per week for history display
             earned_badges = UserAppBadge.objects.filter(user=user).select_related('badge_template')
             badge_by_week = {}
             for badge in earned_badges:
@@ -561,15 +516,12 @@ class WeeklyCheckinHistoryAPIView(APIView):
                     "total_responses": UserWeeklyCheckinResponse.objects.filter(weekly_checkin=wc).count(),
                     "badge_earned": None,
                 }
-                # Check if a badge was earned at this week's completion count
                 if wc.status == 'completed':
                     completed_so_far += 1
                     if completed_so_far in badge_by_week:
                         week_entry['badge_earned'] = badge_by_week[completed_so_far]
 
                 weeks_data.append(week_entry)
-
-            # Streak calculation
             current_streak = 0
             longest_streak = 0
             temp_streak = 0
@@ -597,9 +549,6 @@ class WeeklyCheckinHistoryAPIView(APIView):
                     "message": f"You have completed {total_completed} week(s)."
                 }
             })
-
-
-# ─── Badge Views ──────────────────────────────────────────────────────────────────
 
 class PopulateBadgeTemplatesAPIView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]

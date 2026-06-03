@@ -1,4 +1,3 @@
-# apps/subscription/services/webhooks.py - Updated with proper cancellation handling
 import json
 import stripe
 from django.conf import settings
@@ -32,8 +31,6 @@ def stripe_webhook(request):
     except stripe.error.SignatureVerificationError:
         logger.error("Invalid signature")
         return HttpResponse(status=400)
-
-    # Handle the event
     if event['type'] == 'customer.subscription.updated':
         handle_subscription_updated(event['data']['object'])
     elif event['type'] == 'customer.subscription.deleted':
@@ -52,14 +49,8 @@ def handle_subscription_updated(subscription):
         user_subscription = UserSubscription.objects.get(
             stripe_subscription_id=subscription['id']
         )
-        
-        # Store previous status to detect changes
         previous_status = user_subscription.status
-        
-        # Update status from Stripe
         user_subscription.status = subscription['status']
-        
-        # Handle period dates with proper checks
         if subscription.get('current_period_start'):
             user_subscription.current_period_start = timezone.datetime.fromtimestamp(
                 subscription['current_period_start'], tz=ZoneInfo("UTC")
@@ -69,8 +60,6 @@ def handle_subscription_updated(subscription):
             user_subscription.current_period_end = timezone.datetime.fromtimestamp(
                 subscription['current_period_end'], tz=ZoneInfo("UTC")
             )
-        
-        # Handle trial dates
         if subscription.get('trial_start'):
             user_subscription.trial_start = timezone.datetime.fromtimestamp(
                 subscription['trial_start'], tz=ZoneInfo("UTC")
@@ -80,16 +69,12 @@ def handle_subscription_updated(subscription):
             user_subscription.trial_end = timezone.datetime.fromtimestamp(
                 subscription['trial_end'], tz=ZoneInfo("UTC")
             )
-        
-        # Handle cancellation timestamp
         if subscription.get('canceled_at'):
             user_subscription.canceled_at = timezone.datetime.fromtimestamp(
                 subscription['canceled_at'], tz=ZoneInfo("UTC")
             )
         
         user_subscription.save()
-
-        # 🔔 SUBSCRIPTION WAS CANCELED (but still active until period end)
         if (subscription['status'] == 'canceled' and 
             previous_status != 'canceled' and
             user_subscription.current_period_end):
@@ -105,8 +90,6 @@ def handle_subscription_updated(subscription):
                     'canceled_at': user_subscription.canceled_at.isoformat() if user_subscription.canceled_at else None
                 }
             )
-
-        # 🔔 CHECK IF TRIAL IS ENDING SOON (2 days before)
         elif (user_subscription.status == 'trialing' and 
             user_subscription.trial_end and 
             user_subscription.days_until_trial_end() <= 2):
@@ -121,8 +104,6 @@ def handle_subscription_updated(subscription):
                     'days_left': user_subscription.days_until_trial_end()
                 }
             )
-        
-        # 🔔 TRIAL ENDED - NOW ACTIVE
         elif (subscription['status'] == 'active' and 
               previous_status == 'trialing'):
             
@@ -136,8 +117,6 @@ def handle_subscription_updated(subscription):
                     'plan_name': user_subscription.subscription_plan.name if user_subscription.subscription_plan else 'Pro Plan'
                 }
             )
-
-        # 🔔 SUBSCRIPTION BECAME PAST DUE
         elif (subscription['status'] == 'past_due' and 
               previous_status != 'past_due'):
             
@@ -168,17 +147,11 @@ def handle_subscription_deleted(subscription):
         user_subscription = UserSubscription.objects.get(
             stripe_subscription_id=subscription['id']
         )
-        
-        # Update status to canceled
         user_subscription.status = 'canceled'
-        
-        # Set canceled_at if not already set
         if not user_subscription.canceled_at:
             user_subscription.canceled_at = timezone.now()
         
         user_subscription.save()
-        
-        # 🔔 SUBSCRIPTION ACCESS HAS ACTUALLY ENDED
         NotificationService.send_notification(
             user_id=user_subscription.user.id,
             title="Subscription Ended 📋",
@@ -204,9 +177,6 @@ def handle_payment_succeeded(invoice):
         if subscription_id:
             user_sub = UserSubscription.objects.get(stripe_subscription_id=subscription_id)
             user_sub.mark_payment_success()
-
-            # Don't send notification for first payment (trial end) as it's handled in subscription_updated
-            # Only send for renewal payments
             if user_sub.last_payment_date:  # This means it's not the first payment
                 NotificationService.send_notification(
                     user_id=user_sub.user.id,

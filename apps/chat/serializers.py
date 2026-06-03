@@ -17,7 +17,6 @@ class ChatSessionSerializer(serializers.ModelSerializer):
     message_count = serializers.ReadOnlyField()
     last_message_at = serializers.SerializerMethodField()
     is_favorite = serializers.BooleanField(default=False)
-    # NEW: preview shows first user question, NOT the AI response
     preview = serializers.SerializerMethodField()
  
     class Meta:
@@ -38,7 +37,6 @@ class ChatSessionSerializer(serializers.ModelSerializer):
         if not first_user_message or not first_user_message.content:
             return ""
         content = first_user_message.content
-        # Truncate at 100 chars
         if len(content) > 100:
             return content[:97] + "..."
         return content

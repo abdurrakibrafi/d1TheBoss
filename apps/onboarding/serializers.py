@@ -17,10 +17,6 @@ from apps.onboarding.models import (
 )
 from apps.accounts.models import UserProfile
 
-# =============================================
-# MASTER DATA SERIALIZERS (Read Only - for dropdowns/options)
-# =============================================
-
 
 class JourneyReasonOptionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -68,11 +64,6 @@ class BibleVersionOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = BibleVersionOption
         fields = ["id", "title", "subtitle", "api_bible_id", "is_active", "is_selected"]
-
-
-# =============================================
-# USER SELECTION SERIALIZERS (For saving user choices)
-# =============================================
 
 
 class JourneyReasonSerializer(serializers.ModelSerializer):
@@ -134,11 +125,7 @@ class BulkFaithGoalSerializer(serializers.Serializer):
         print(f"=== BULK FAITH GOAL SERIALIZER DEBUG ===")
         print(f"User: {user.id}")
         print(f"Goals data: {goals_data}")
-
-        # Delete existing goals for this user
         FaithGoal.objects.filter(user=user).delete()
-
-        # Create new goals
         goals = []
         for goal_data in goals_data:
             goal_data["user"] = user
@@ -146,13 +133,9 @@ class BulkFaithGoalSerializer(serializers.Serializer):
 
         created_goals = FaithGoal.objects.bulk_create(goals)
         print(f"Created {len(created_goals)} goals")
-        
-        # Debug: Check what was actually saved
         saved_goals = FaithGoal.objects.filter(user=user).select_related('faith_goal_option')
         for goal in saved_goals:
             print(f"Saved goal - Option ID: {goal.faith_goal_option.id}, Option: {goal.faith_goal_option.option}, Goal Type: {goal.faith_goal_option.goal_type}")
-        
-        # ADD THIS: Update user's goal based on new faith goal selections
         try:
             from apps.goal.models import UserGoal
             print("=== CALLING GOAL UPDATE ===")
@@ -230,11 +213,6 @@ class BibleVersionSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
-# =============================================
-# ONBOARDING COMBINED SERIALIZERS
-# =============================================
-
-
 class OnboardingOptionsSerializer(serializers.Serializer):
     """All master data in one response for onboarding"""
 
@@ -262,9 +240,6 @@ class UserOnboardingProgressSerializer(serializers.ModelSerializer):
     def get_progress_percentage(self, obj):
         total_steps = 7  # Based on your 6 onboarding sections
         return (obj.onboarding_step / total_steps) * 100 if obj.onboarding_step else 0
-
-
-# this is for ai response
 
 
 class UserOnboardingSummarySerializer(serializers.Serializer):

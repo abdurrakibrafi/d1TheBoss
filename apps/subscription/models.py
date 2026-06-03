@@ -11,8 +11,6 @@ class SubscriptionPlan(models.Model):
 
     name = models.CharField(max_length=100, blank=True, null=True)
     plan_type = models.CharField(max_length=20, choices=PLAN_TYPES)
-
-    # RevenueCat fields
     revenuecat_entitlement_id = models.CharField(max_length=100, blank=True, null=True) 
     revenuecat_product_id_android = models.CharField(max_length=100, blank=True, null=True)
     revenuecat_product_id_ios = models.CharField(max_length=100, blank=True, null=True)

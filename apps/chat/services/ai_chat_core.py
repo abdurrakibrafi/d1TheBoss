@@ -4,9 +4,6 @@ import re
 from typing import List, Dict, Optional
 from django.conf import settings
 
-
-# ─── Tier Prompts ────────────────────────────────────────────────────────────────
-
 TIER_CONVERSATION_READY = """You are a Christian articulation assistant for Preachly.
 Your task is to generate a Conversation Ready response to a user-submitted faith question, objection, doubt, or difficult topic.
 This tier exists to help someone say something thoughtful, calm, and believable in a real conversation.
@@ -410,9 +407,6 @@ Do not include emojis, hashtags, mention being an AI, or mention internal struct
 Return only the final user-facing "Full Framework" response.
 Don't just explain Christian perspective. Help the user emotionally and intellectually reorganize the question itself."""
 
-
-# ─── Clarification Prompts ───────────────────────────────────────────────────────
-
 CLARIFICATION_YES_PROMPT = """If the user selects "Need More Clarity," provide a focused expansion that deepens understanding without repeating the original response.
 Assume the user has already read the previous answer. Do not restate it. Do not summarize it.
 Instead, help the core idea "click" more clearly by moving the explanation one step deeper in a natural, conversational way.
@@ -567,8 +561,6 @@ Guidelines:
 
 Return only the follow-up question in the format above."""
 
-# ─── Tone Blocks ─────────────────────────────────────────────────────────────────
-
 TONE_BLOCKS = {
     "Clear and Hopeful": {
         "description": "Simple, direct, and steady. Communicates truth clearly while emphasizing God's love and faithfulness.",
@@ -604,8 +596,6 @@ TONE_BLOCKS = {
     },
 }
 
-# ─── Tier Config ─────────────────────────────────────────────────────────────────
-
 TIER_CONFIG = {
     "Conversation Ready": {
         "prompt": TIER_CONVERSATION_READY,
@@ -629,8 +619,6 @@ def build_tone_block(tone_name: str, tier_name: str) -> str:
     """Build the tone injection system message"""
     tone = TONE_BLOCKS.get(tone_name, TONE_BLOCKS["Clear and Hopeful"])
     guardrails = "\n".join([f"- {g}" for g in tone["guardrails"]])
-
-    # Tone intensity based on tier
     intensity_map = {
         "Conversation Ready": "60%",
         "In-Depth Explanation": "80%",
@@ -655,9 +643,6 @@ Tone Application Rules:
 - Avoid blending with other tones.
 - Match tone subtly, not theatrically.
 - Tone intensity should be moderated to approximately {intensity} to fit the selected tier depth."""
-
-
-# ─── Main AI Service ──────────────────────────────────────────────────────────────
 
 class AIChatCore:
     """Preachly AI service — GPT-4.1 with modular Tier + Tone architecture"""
@@ -788,11 +773,7 @@ class AIChatCore:
 
             response = self._call_api(messages, max_tokens=100, temperature=0.6)
 
-            # NOTE: '— or —\nStart a new chat' is appended at UI level, not here.
-
             content = response.choices[0].message.content
-
-            # Clean up formatting — remove extra newlines and normalize quotes
             content = content.strip()
             content = content.replace('\n"', ' "')
             content = content.replace('You could ask:  \n', 'You could ask: ')
@@ -898,7 +879,6 @@ Do not use emojis. Do not mention being an AI."""
                         "verse": verse,
                         "reference": f"{book} {chapter}:{verse}"
                     })
-        # Deduplicate
         seen = set()
         unique = []
         for ref in references:

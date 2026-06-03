@@ -39,18 +39,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if isinstance(self.user, AnonymousUser):
             await self.close(code=4001)
             return
-
-        # Get session_id from URL
         self.session_id = self.scope["url_route"]["kwargs"].get("session_id")
-
-        # Validate session exists for this user
         if self.session_id:
             try:
                 self.conversation = await database_sync_to_async(ConversationManager)(
                     user=self.user, session_id=self.session_id
                 )
-                # Refresh the session's context snapshot from latest onboarding
-                # data so updates (e.g. tone changes) are reflected immediately.
                 await database_sync_to_async(
                     lambda: self.conversation.update_session_context(
                         self.conversation._get_user_spiritual_context()
@@ -59,13 +53,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             except Exception as e:
                 await self.close(code=4004)
                 return
-
-        # Join user-specific group
         self.room_group_name = f"bible_chat_{self.user.id}"
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
-
-        # Send connection confirmation
         await self.send(json.dumps({
             "type": "connection",
             "message": "Connected to Bible Chat!",
@@ -117,14 +107,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if not message:
                 await self.send_error("Message cannot be empty")
                 return
- 
-            # Initialize conversation if needed
             if not self.conversation:
                 self.conversation = await database_sync_to_async(ConversationManager)(
                     user=self.user
                 )
- 
-            # Add user message to DB
             await database_sync_to_async(self.conversation.add_message)(
                 content=message, is_user=True
             )
@@ -140,8 +126,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
             if saved_tone:
                 tone = saved_tone
-
-            # ADD THIS — pull depth from bible_familiarity
             saved_familiarity = (
                 user_context.get("bible_familiarity", {}).get("title")
                 if user_context else None
@@ -153,9 +137,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             }
             if saved_familiarity and saved_familiarity in familiarity_to_depth:
                 depth = familiarity_to_depth[saved_familiarity]
-            
-            # Handle yes_no BEFORE sending typing indicator
-            # Clarification handlers control their own typing indicator
             if message_type == "yes_no":
                 if message.lower() in ["yes", "yes, explain more"]:
                     await self.handle_clarification_request(data)
@@ -163,11 +144,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 elif message.lower() in ["no", "no, thanks"]:
                     await self.handle_no_clarification(data)
                     return
- 
-            # Only send typing for normal messages (not yes/no)
             await self.send(json.dumps({"type": "typing", "is_typing": True}))
- 
-            # Generate Preachly response
             ai_response_data = await asyncio.get_event_loop().run_in_executor(
                 None, self._generate_preachly_response, message, tone, depth, user_context
             )
@@ -297,8 +274,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     "content": continuation_data["content"],
                     "session_id": str(self.conversation.session.id),
                     "message_id": continuation_message.id,
-                    # Frontend renders below this:
-                    # "— or —\nStart a new chat"
                     "show_clarification": False,
                     "show_new_chat_option": True,
                     "timestamp": continuation_message.created_at.isoformat(),
@@ -449,8 +424,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             user=self.user,
             user_context=user_context
         )
-
-    # Handle group messages (for future features like notifications)
     async def chat_message(self, event):
         """Handle messages sent to the group"""
         await self.send(json.dumps({

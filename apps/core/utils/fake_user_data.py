@@ -22,11 +22,8 @@ class FakeDataGenerator:
         users_created = []
 
         for i in range(count):
-            # Generate fake user data
             email = fake.email()
             password = "password123"  # Simple password for testing
-
-            # Create user
             user = User.objects.create_user(
                 email=email,
                 password=password,
@@ -34,8 +31,6 @@ class FakeDataGenerator:
                 first_name=fake.first_name(),
                 last_name=fake.last_name(),
             )
-
-            # Update profile with fake data
             profile = user.profile
             profile.name = f"{user.first_name} {user.last_name}"
             profile.phone = fake.phone_number()[:15]  # Limit to 15 chars
@@ -66,8 +61,6 @@ class FakeDataGenerator:
         """
         email = "admin@example.com"
         password = "admin123"
-
-        # Check if admin already exists
         if User.objects.filter(email=email).exists():
             return {"message": "Admin user already exists", "email": email}
 
@@ -78,8 +71,6 @@ class FakeDataGenerator:
             last_name="User",
             is_active=True,
         )
-
-        # Update profile
         profile = admin_user.profile
         profile.name = "Admin User"
         profile.phone = "+1234567890"
@@ -133,7 +124,6 @@ class FakeDataGenerator:
         password = "testuser123"
 
         for user_data in test_users_data:
-            # Skip if user already exists
             if User.objects.filter(email=user_data["email"]).exists():
                 continue
 
@@ -144,8 +134,6 @@ class FakeDataGenerator:
                 last_name=user_data["last_name"],
                 is_active=True,
             )
-
-            # Update profile
             profile = user.profile
             profile.name = user_data["name"]
             profile.phone = user_data["phone"]

@@ -2,9 +2,7 @@ from django.urls import path
 from apps.onboarding import views
 
 urlpatterns = [
-    # Master data
     path("options/", views.OnboardingOptionsView.as_view(), name="onboarding-options"),
-    # # User selections
     path("journey-reason/", views.JourneyReasonView.as_view(), name="journey-reason"),
     path("denomination/", views.DenominationView.as_view(), name="denomination"),
     path("faith-goals/", views.FaithGoalView.as_view(), name="faith-goals"),
@@ -22,7 +20,6 @@ urlpatterns = [
         views.UserOnboardingDataView.as_view(),
         name="user-onboarding-data",
     ),
-    # Progress tracking
     path(
         "progress/", views.OnboardingProgressView.as_view(), name="onboarding-progress"
     ),

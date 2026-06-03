@@ -31,8 +31,6 @@ def get_plans(request):
                 'currency': plan.currency,
                 'interval': plan.interval,
                 'trial_period_days': plan.trial_period_days,
-
-                # All payment provider IDs
                 'revenuecat_entitlement_id': plan.revenuecat_entitlement_id,
                 'revenuecat_product_id_android': plan.revenuecat_product_id_android,
                 'revenuecat_product_id_ios': plan.revenuecat_product_id_ios,
@@ -59,7 +57,6 @@ def link_revenuecat_user(request):
     Supports both POST (create/link) and PUT (update) operations
     """
     try:
-        # Extract data from request
         revenuecat_user_id = request.data.get('revenuecat_user_id')
         has_active_subscription = request.data.get('has_active_subscription', False)
         subscription_status = request.data.get('status', 'free')
@@ -73,12 +70,8 @@ def link_revenuecat_user(request):
         first_seen = request.data.get('first_seen')
         original_app_version = request.data.get('original_app_version')
         original_transaction_id = request.data.get('original_transaction_id')
-
-        # Validate required fields
         if not revenuecat_user_id:
             return mixin.bad_request_response(message="revenuecat_user_id is required")
-
-        # Get or create user subscription
         user_subscription, created = UserSubscription.objects.get_or_create(
             user=request.user,
             defaults={
@@ -88,19 +81,11 @@ def link_revenuecat_user(request):
                 'revenuecat_original_transaction_id': original_transaction_id,
             }
         )
-
-        # Update RevenueCat user ID if not created
         if not created:
             user_subscription.revenuecat_user_id = revenuecat_user_id
-
-        # Store original transaction ID
         if original_transaction_id:
             user_subscription.revenuecat_original_transaction_id = original_transaction_id
-
-        # Update subscription status based on RevenueCat data
         user_subscription.active_entitlements = active_entitlements
-
-        # Set status based on subscription state
         if has_active_subscription:
             if period_type == 'trial':
                 user_subscription.status = 'trialing'
@@ -108,8 +93,6 @@ def link_revenuecat_user(request):
                 user_subscription.status = 'active'
         else:
             user_subscription.status = 'free'
-
-        # Parse and set expiration date
         if expiration_date:
             try:
                 from dateutil import parser
@@ -117,8 +100,6 @@ def link_revenuecat_user(request):
                 user_subscription.current_period_start = timezone.now()
             except Exception as e:
                 print(f"Error parsing expiration date: {e}")
-
-        # Match subscription plan based on product_id
         if product_id and has_active_subscription:
             subscription_plan = SubscriptionPlan.objects.filter(
                 Q(revenuecat_product_id_android=product_id) |
@@ -128,15 +109,12 @@ def link_revenuecat_user(request):
             if subscription_plan:
                 user_subscription.subscription_plan = subscription_plan
             else:
-                # Fallback: match by entitlement_id
                 if entitlement_id:
                     subscription_plan = SubscriptionPlan.objects.filter(
                         revenuecat_entitlement_id=entitlement_id
                     ).first()
                     if subscription_plan:
                         user_subscription.subscription_plan = subscription_plan
-
-        # Set trial dates if in trial period
         if period_type == 'trial' and expiration_date:
             try:
                 from dateutil import parser
@@ -144,18 +122,12 @@ def link_revenuecat_user(request):
                 user_subscription.trial_end = parser.parse(expiration_date)
             except Exception as e:
                 print(f"Error parsing trial dates: {e}")
-
-        # Set payment status
         if has_active_subscription:
             user_subscription.payment_status = 'paid'
             user_subscription.last_payment_date = timezone.now()
         else:
             user_subscription.payment_status = 'pending'
-
-        # Save all changes
         user_subscription.save()
-
-        # Prepare comprehensive response
         response_data = {
             'user_id': request.user.id,
             'user_email': request.user.email,
@@ -232,8 +204,6 @@ def subscription_status(request):
                 'active_entitlements': user_subscription.active_entitlements,
                 'revenuecat_user_id': user_subscription.revenuecat_user_id,
                 'original_transaction_id': user_subscription.revenuecat_original_transaction_id,
-
-                # Subscription details
                 'is_trial': user_subscription.status == 'trialing',
                 'trial_end': user_subscription.trial_end.isoformat() if user_subscription.trial_end else None,
                 'payment_status': user_subscription.payment_status,
@@ -263,8 +233,6 @@ def setup_revenuecat_plans(request):
     """Create/Update RevenueCat subscription plans - Admin only"""
     try:
         plans_created = []
-
-        # Monthly Pro Plan
         monthly_plan, created = SubscriptionPlan.objects.get_or_create(
             plan_type="pro_monthly",
             defaults={
@@ -280,8 +248,6 @@ def setup_revenuecat_plans(request):
             }
         )
         plans_created.append({"plan": "pro_monthly", "created": created})
-
-        # Yearly Pro Plan
         yearly_plan, created = SubscriptionPlan.objects.get_or_create(
             plan_type="pro_yearly",
             defaults={
@@ -312,9 +278,6 @@ def setup_revenuecat_plans(request):
             {"error": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-    
-
-# Webhook handler - This is the ONLY place that syncs automatically
 @csrf_exempt
 def revenuecat_webhook(request):
     """Handle RevenueCat webhook events"""
@@ -360,22 +323,15 @@ def _handle_subscription_activated(event_data):
         ).first()
 
         if user_subscription:
-            # Update status
             if period_type == 'trial':
                 user_subscription.status = 'trialing'
             else:
                 user_subscription.status = 'active'
-
-            # Update entitlements
             user_subscription.active_entitlements = entitlement_ids
-
-            # Set expiration
             if expiration_at_ms:
                 user_subscription.current_period_end = timezone.datetime.fromtimestamp(
                     expiration_at_ms / 1000, tz=timezone.utc
                 )
-
-            # Match plan by product_id
             if product_id:
                 plan = SubscriptionPlan.objects.filter(
                     Q(revenuecat_product_id_android=product_id) |

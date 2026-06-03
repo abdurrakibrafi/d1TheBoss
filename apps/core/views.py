@@ -77,221 +77,9 @@ class PrivacyPolicyView(BaseResponseMixin, generics.RetrieveAPIView):
             return self.handle_exception(e)
 
 
-# @api_view(["POST"])
-# def populate_onboarding_data(request):
-#     try:
-#         # 🧹 DELETE all old data
-#         JourneyReasonOption.objects.all().delete()
-#         DenominationOption.objects.all().delete()
-#         FaithGoalOption.objects.all().delete()
-#         FaithGoalQuestion.objects.all().delete()
-#         TonePreferenceOption.objects.all().delete()
-#         BibleFamiliarityOption.objects.all().delete()
-#         BibleVersionOption.objects.all().delete()
-
-#         # 🚀 INSERT fresh data
-
-#         # Journey Reasons
-#         journey_reasons = [
-#             "Clarity to overcome doubts",
-#             "Confidence to share my beliefs",
-#         ]
-#         for reason in journey_reasons:
-#             JourneyReasonOption.objects.create(
-#                 option=reason, is_active=True
-#             )
-
-#         # Denominations
-#         denominations = [
-#             "Catholic", "Protestant", "Baptist", "Nondenominational", "Methodist",
-#             "Pentecostal", "Lutheran", "Evangelical", "Adventist", "Orthodox", "Other",
-#         ]
-#         for denomination in denominations:
-#             DenominationOption.objects.create(
-#                 name=denomination, is_active=True
-#             )
-
-#         # Faith Goal Questions and Options
-#         faith_goal_data = [
-#             {
-#                 "question": "What's holding you back from confidently living and sharing your faith?",
-#                 "options": [
-#                     "I feel unsure how to respond to questions or doubts about my faith.",
-#                     "I struggle to find the right words to share scripture effectively.",
-#                     "I feel I need a deeper connection to God's word before I can inspire others.",
-#                 ],
-#             },
-#             {
-#                 "question": "How do you hope to grow in your walk with God?",
-#                 "options": [
-#                     "I want to learn how to speak about my faith with confidence and clarity.",
-#                     "I want to strengthen my understanding of scripture and apply it to my life.",
-#                     "I want to inspire and encourage others through my faith journey.",
-#                 ],
-#             },
-#             {
-#                 "question": "What would help you feel more equipped to achieve your faith goals?",
-#                 "options": [
-#                     "Practical tools to respond to objections and questions about faith.",
-#                     "Daily scripture insights that I can share with others or reflect on.",
-#                     "Clear and inspired guidance rooted in scripture.",
-#                 ],
-#             },
-#         ]
-#         for item in faith_goal_data:
-#             question_obj = FaithGoalQuestion.objects.create(
-#                 question=item["question"], is_active=True
-#             )
-#             for option in item["options"]:
-#                 FaithGoalOption.objects.create(
-#                     faith_goal_question=question_obj,
-#                     option=option,
-#                     is_active=True,
-#                 )
-
-#         # Tone Preferences
-#         tone_preference_data = [
-#             {
-#                 "title": "Clear and Hopeful",
-#                 "name": "Clear and Hopeful",
-#                 "description": "Simple, direct, and encouraging. Speaks to God’s love and faithfulness in an easily understood way.",
-#                 "quote": "God allows us to choose because He loves us deeply. Even in our struggles, His grace is always enough.",
-#             },
-#             {
-#                 "title": "Dynamic and Powerful",
-#                 "name": "Dynamic and Powerful",
-#                 "description": "Emotive, bold, and filled with vivid imagery. Designed to inspire and energize",
-#                 "quote": "Sin may exist, but so does God’s unstoppable power to redeem, restore, and turn every story into a victory.",
-#             },
-#             {
-#                 "title": "Practical and Everyday",
-#                 "name": "Practical and Everyday",
-#                 "description": "Grounded and solution-oriented, focusing on how faith applies to daily life",
-#                 "quote": "Sometimes life feels messy, but God uses even our mistakes to shape us and teach us how to walk in His ways.",
-#             },
-#             {
-#                 "title": "Encouraging and Purposeful",
-#                 "name": "Encouraging and Purposeful",
-#                 "description": "Focuses on meaning and growth through challenges, using affirming and positive language",
-#                 "quote": "It’s not always easy to understand, but God allows challenges so we can grow stronger in faith and closer to Him.",
-#             },
-#             {
-#                 "title": "Uplifting and Optimistic",
-#                 "name": "Uplifting and Optimistic",
-#                 "description": "Highlights hope and joy even in adversity, emphasizing God’s ongoing provision",
-#                 "quote": "Even in a broken world, God’s love shines through. His plan for good will always outweigh the pain we see now.",
-#             },
-#             {
-#                 "title": "Scholarly and Rational",
-#                 "name": "Scholarly and Rational",
-#                 "description": "Appeals to logic and reason, using well-structured arguments and historical/theological insights.",
-#                 "quote": "Sin entered through humanity’s choices, but God’s plan through Jesus shows us the depth of His justice and mercy.",
-#             },
-#             {
-#                 "title": "Warm and Relatable",
-#                 "name": "Warm and Relatable",
-#                 "description": "Conversational, empathetic, and emotionally resonant. Speaks to the heart with compassion.",
-#                 "quote": "That’s a tough question—it’s okay to wrestle with it. What matters most is knowing God is with you, no matter what.",
-#             },
-#             {
-#                 "title": "Passionate and Empowering",
-#                 "name": "Passionate and Empowering",
-#                 "description": "Focused on spiritual growth and perseverance, emphasizing strength and action",
-#                 "quote": "Sin doesn’t define us—God’s purpose does. You have the power to walk boldly in the freedom He’s given you.",
-#             },
-#         ]
-#         for tone in tone_preference_data:
-#             TonePreferenceOption.objects.create(
-#                 title=tone["title"],
-#                 name=tone["name"],
-#                 description=tone["description"],
-#                 quote=tone["quote"],
-#                 is_active=True
-#             )
-
-#         # Bible Familiarity
-#         bible_familiarity_data = [
-#             {
-#                 "label": "None",
-#                 "text1": "New to the Word? No problem!",
-#                 "text2": "",
-#                 "title": "Simplified Responses",
-#                 "name": "Simplified Responses",
-#                 "caption": "Preachly will break things down in an easy-to-understand way, offering clear, simple explanations to help you build a strong foundation.",
-#             },
-#             {
-#                 "label": "A Little",
-#                 "text1": "A great foundation! Let's go deeper",
-#                 "text2": "You have some knowledge, and we'll build on it!",
-#                 "title": "In-Depth Responses",
-#                 "name": "In-Depth Responses",
-#                 "caption": "Preachly's answers will include context connections, and deeper insights to enrich your understanding",
-#             },
-#             {
-#                 "label": "A Lot",
-#                 "text1": "Ready for the deep dive?",
-#                 "text2": "",
-#                 "title": "Multi-Argumentation Responses",
-#                 "name": "Multi-Argumentation Responses",
-#                 "caption": "Preachly will provide multi-layered explanations, exploring different perspectives, theological arguments, and scriptural connections to help you sharpen your understanding",
-#             },
-#         ]
-#         for item in bible_familiarity_data:
-#             BibleFamiliarityOption.objects.create(
-#                 label=item["label"],
-#                 text1=item["text1"],
-#                 text2=item["text2"],
-#                 title=item["title"],
-#                 name=item["name"],
-#                 caption=item["caption"],
-#                 is_active=True
-#             )
-
-#         # Bible Versions
-#         bible_versions = [
-#             {
-#                 "api_bible_id": "de4e12af7f28f599-01",
-#                 "title": "King James (Authorized) Version (KJV)",
-#                 "subtitle": "Classic 1611 English Protestant translation",
-#             },
-#             {
-#                 "api_bible_id": "9879dbb7cfe39e4d-01",
-#                 "title": "World English Bible (WEB)",
-#                 "subtitle": "Modern English public domain translation",
-#             },
-#             {
-#                 "api_bible_id": "06125adad2d5898a-01",
-#                 "title": "The Holy Bible, American Standard Version (ASV)",
-#                 "subtitle": "1901 American English revision",
-#             }
-#         ]
-#         for version in bible_versions:
-#             BibleVersionOption.objects.create(
-#                 api_bible_id=version["api_bible_id"],
-#                 title=version["title"],
-#                 subtitle=version["subtitle"],
-#                 is_active=True
-#             )
-
-#         return Response({
-#             "success": True,
-#             "message": "✅ All onboarding data wiped & repopulated successfully!",
-#             "status_code": 200,
-#         }, status=status.HTTP_200_OK)
-
-#     except Exception as e:
-#         return Response({
-#             "success": False,
-#             "message": f"❌ Error: {str(e)}",
-#             "status_code": 500,
-#         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 @api_view(["POST"])
 def populate_onboarding_data(request):
     try:
- 
-        # Journey Reasons
         journey_reasons = [
             "Clarity to overcome doubts",
             "Confidence to share my beliefs",
@@ -301,8 +89,6 @@ def populate_onboarding_data(request):
                 option=reason,
                 defaults={"is_active": True},
             )
- 
-        # Denominations
         denominations = [
             "Catholic", "Protestant", "Baptist", "Nondenominational", "Methodist",
             "Pentecostal", "Lutheran", "Evangelical", "Adventist", "Orthodox", "Other",
@@ -312,9 +98,6 @@ def populate_onboarding_data(request):
                 name=denomination,
                 defaults={"is_active": True},
             )
- 
-        # ✅ Faith Goal Questions and Options
-        # Matched by question text — updates text fields, preserves everything else
         faith_goal_data = [
             {
                 "question": "When faith conversations come up, where do you want more confidence?",
@@ -343,8 +126,6 @@ def populate_onboarding_data(request):
         ]
         for index, item in enumerate(faith_goal_data):
             question_obj, _ = FaithGoalQuestion.objects.update_or_create(
-                # match by order position using a stable lookup field
-                # if your model has an 'order' field use that, otherwise question text
                 question=item["question"],
                 defaults={"is_active": True},
             )
@@ -354,9 +135,6 @@ def populate_onboarding_data(request):
                     option=option_text,
                     defaults={"is_active": True},
                 )
- 
-        # Tone Preferences
-        # Matched by title — image field (icon) is NOT in defaults so it's never touched
         tone_preference_data = [
             {
                 "title": "Clear and Hopeful",
@@ -417,9 +195,6 @@ def populate_onboarding_data(request):
                     "is_active": True,
                 },
             )
- 
-        # ✅ Bible Familiarity
-        # Matched by label (None / A Little / A Lot) — stable unique key
         bible_familiarity_data = [
             {
                 "label": "None",
@@ -458,9 +233,6 @@ def populate_onboarding_data(request):
                     "is_active": True,
                 },
             )
- 
-        # Bible Versions
-        # Already uses api_bible_id as unique field — perfect lookup key
         bible_versions = [
             {
                 "api_bible_id": "de4e12af7f28f599-01",
@@ -581,10 +353,6 @@ class FakeDataAPIView(BaseResponseMixin, APIView):
                 message=f"Error processing request: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-
-
-# serializers.py weekly check-in questions and options
 from rest_framework import serializers
 from apps.checkin.models import WeeklyCheckinQuestion, WeeklyCheckinOption
 
@@ -600,13 +368,9 @@ class WeeklyCheckinQuestionSerializer(serializers.ModelSerializer):
         model = WeeklyCheckinQuestion
         fields = ['id', 'question_text', 'question_order', 'is_active', 'created_at', 'options']
 
-
-# Views for Weekly Check-in population and retrieval
-
 @api_view(['POST'])
 def populate_weekly_checkin_questions(request):
     try:
-        # ✅ Matched by question_text — no deletes, safe to re-run anytime
         questions_data = [
             {
                 'question': 'This week, how confident did you feel talking about your faith?',
@@ -788,22 +552,14 @@ def get_daily_modal_checkin(request):
     """
     try:
         user = request.user
-        
-        # Create cache key with user ID and today's date
         today = datetime.now().strftime('%Y-%m-%d')
         cache_key = f'daily_modal_checkin_{user.id}_{today}'
-        
-        # Check if user already accessed modal today
         if cache.get(cache_key):
-            # Already showed modal today
             return Response({
                 'success': True,
                 'show_modal': False,
                 'message': 'Modal already shown today'
             }, status=status.HTTP_200_OK)
-        
-        # First time accessing today - set cache and return true
-        # Cache expires in 24 hours
         cache.set(cache_key, True, 86400)
         
         return Response({

@@ -3,24 +3,18 @@ def get_user_primary_goal_type(user):
     print(f"User: {user.id}")
     
     from apps.onboarding.models import FaithGoal, UserGoalPreference
-    
-    # Check if user has direct goal preference first
     try:
         goal_preference = UserGoalPreference.objects.get(user=user)
         print(f"Found goal preference: {goal_preference.goal_type}")
         return goal_preference.goal_type
     except UserGoalPreference.DoesNotExist:
         print("No goal preference found, calculating from faith goals")
-    
-    # Fallback to faith goal calculation
     user_goals = FaithGoal.objects.filter(user=user).select_related('faith_goal_option')
     print(f"Found {user_goals.count()} faith goals")
     
     if not user_goals.exists():
         print("No faith goals found, returning default 'scripture'")
         return 'scripture'
-    
-    # Count based on goal_type field
     confidence_count = 0
     scripture_count = 0
     inspiration_count = 0
@@ -45,8 +39,6 @@ def get_user_primary_goal_type(user):
             print(f"  -> No goal_type found for this option!")
     
     print(f"Final counts - Confidence: {confidence_count}, Scripture: {scripture_count}, Inspiration: {inspiration_count}")
-    
-    # Return the goal type with highest count
     if confidence_count > scripture_count and confidence_count > inspiration_count:
         result = 'conversation'
     elif inspiration_count > scripture_count and inspiration_count > confidence_count:

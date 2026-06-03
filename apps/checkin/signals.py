@@ -1,4 +1,3 @@
-# apps/checkin/signals.py
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
@@ -17,8 +16,6 @@ def on_user_created(sender, instance, created, **kwargs):
             BadgeTemplate,
             UserAppBadge
         )
-        
-        # 1. Create Week 1 immediately
         week_start, week_end = get_current_week_boundaries()
         UserWeeklyCheckin.objects.get_or_create(
             user=instance,
@@ -31,8 +28,6 @@ def on_user_created(sender, instance, created, **kwargs):
                 'is_completed': False,
             }
         )
-        
-        # 2. Award default badge immediately
         try:
             default_template = BadgeTemplate.objects.get(badge_type='default')
             UserAppBadge.objects.get_or_create(

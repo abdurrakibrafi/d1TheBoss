@@ -1,4 +1,3 @@
-# Updated services/bible_api_service.py
 import requests
 import re
 from bs4 import BeautifulSoup
@@ -14,8 +13,6 @@ class BibleAPIService:
             'api-key': self.api_key,
             'Content-Type': 'application/json'
         }
-        
-        # This will be populated from database
         self.available_bibles = self.get_available_bibles_from_db()
     
     def get_available_bibles_from_db(self):
@@ -31,7 +28,6 @@ class BibleAPIService:
             
             return bible_dict
         except ImportError:
-            # Fallback to hardcoded versions if onboarding app not available
             return {
                 'ASV': '06125adad2d5898a-01',
                 'ASV-BYZ': '685d1470fe4d5c3b-01',
@@ -63,7 +59,6 @@ class BibleAPIService:
             for version_option in active_versions:
                 print(f"DEBUG: Processing version {version_option.title}")  # Debug log
                 if version_option.api_bible_id:
-                    # Get details from API.Bible
                     bible_info = self.get_bible_details(version_option.api_bible_id)
                     print(f"DEBUG: Got bible info for {version_option.api_bible_id}")  # Debug log
                     
@@ -76,15 +71,12 @@ class BibleAPIService:
                         'language': bible_info.get('language', {}).get('name', 'English') if bible_info else 'English',
                         'is_default': False
                     })
-            
-            # Cache for 1 hour
             cache.set(cache_key, versions, 3600)
             print(f"DEBUG: Returning {len(versions)} versions from DB")  # Debug log
             return versions
             
         except ImportError as e:
             print(f"DEBUG: ImportError - {str(e)}")  # Debug log
-            # Fallback to hardcoded versions
             return self.get_hardcoded_versions()
         except Exception as e:
             print(f"DEBUG: Unexpected error - {str(e)}")  # Debug log
@@ -117,8 +109,6 @@ class BibleAPIService:
         
         return versions
     
-    # ... rest of your existing methods remain the same ...
-    
     def clean_html_content(self, html_content):
         """Clean HTML content and return plain text"""
         if not html_content:
@@ -141,18 +131,12 @@ class BibleAPIService:
         
         soup = BeautifulSoup(content, 'html.parser')
         verses = []
-        
-        # Find all verse spans
         verse_spans = soup.find_all('span', {'data-number': True})
         
         for span in verse_spans:
             verse_number = span.get('data-number')
             data_sid = span.get('data-sid', '')
-            
-            # Extract the verse ID from data-sid (e.g., "NUM 1:5" -> "NUM.1.5")
             verse_id = self.extract_verse_id_from_sid(data_sid)
-            
-            # Get the verse text (everything after this span until the next verse)
             verse_text = self.extract_verse_text(span)
             
             if verse_text:
@@ -166,15 +150,11 @@ class BibleAPIService:
 
     def extract_verse_id_from_sid(self, data_sid):
         """Convert data-sid format to verse ID format"""
-        # data-sid format: "NUM 1:5" -> "NUM.1.5"
         if not data_sid:
             return ""
-        
-        # Remove extra spaces and split
         parts = data_sid.strip().split()
         if len(parts) >= 2:
             book_chapter = parts[0] + " " + parts[1]  # "NUM 1:5"
-            # Replace space with dot and colon with dot
             verse_id = book_chapter.replace(" ", ".").replace(":", ".")
             return verse_id
         
@@ -182,13 +162,11 @@ class BibleAPIService:
 
     def extract_verse_text(self, span):
         """Extract text content for a verse"""
-        # Get all text after the verse number span until the next verse
         text_parts = []
         current = span.next_sibling
         
         while current:
             if hasattr(current, 'name') and current.name == 'span' and current.get('data-number'):
-                # Stop when we hit the next verse
                 break
             
             if hasattr(current, 'get_text'):
@@ -359,33 +337,21 @@ class BibleAPIService:
             return ""
 
         soup = BeautifulSoup(html_content, 'html.parser')
-
-        # Remove unwanted tags
         for tag in soup(['script', 'style', 'meta', 'link', 'head', 'footer', 'nav']):
             tag.decompose()
-
-        # Remove verse number spans
         for span in soup.find_all("span", {"class": "v"}):
             span.decompose()
         for span in soup.find_all("span", {"data-number": True}):
             span.decompose()
-
-        # Optionally replace <br> and <p> with newlines for readability
         for br in soup.find_all("br"):
             br.replace_with("\n")
         for p in soup.find_all("p"):
             p.insert_before("\n")
-
-        # Remove all attributes from tags
         for tag in soup.find_all(True):
             tag.attrs = {}
-
-        # Get text and unescape HTML entities
         text = soup.get_text()
         text = re.sub(r'\s+', ' ', text).strip()
         text = re.sub(r'[\x00-\x1F\x7F]', '', text)  # Remove non-printable chars
-
-        # Optionally, collapse multiple newlines
         text = re.sub(r'\n+', '\n', text)
 
         return text
@@ -457,7 +423,6 @@ class BibleAPIService:
 
     def get_next_chapter_content(self, bible_id, current_chapter_id):
         """Get the next chapter's full content"""
-        # First get navigation info
         nav_info = self.get_chapter_navigation(bible_id, current_chapter_id)
         
         if 'error' in nav_info:
@@ -466,14 +431,11 @@ class BibleAPIService:
         next_chapter = nav_info.get('next')
         if not next_chapter:
             return {'error': 'No next chapter', 'message': 'This is the last chapter'}
-        
-        # Get the full content of the next chapter
         next_chapter_id = next_chapter.get('id')
         return self.get_chapter_content(bible_id, next_chapter_id)
 
     def get_previous_chapter_content(self, bible_id, current_chapter_id):
         """Get the previous chapter's full content"""
-        # First get navigation info
         nav_info = self.get_chapter_navigation(bible_id, current_chapter_id)
         
         if 'error' in nav_info:
@@ -482,7 +444,5 @@ class BibleAPIService:
         previous_chapter = nav_info.get('previous')
         if not previous_chapter:
             return {'error': 'No previous chapter', 'message': 'This is the first chapter'}
-        
-        # Get the full content of the previous chapter
         previous_chapter_id = previous_chapter.get('id')
         return self.get_chapter_content(bible_id, previous_chapter_id)

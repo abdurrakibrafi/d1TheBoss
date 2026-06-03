@@ -4,11 +4,7 @@ import dj_database_url
 print("🚀 Running in PRODUCTION mode")
 
 DEBUG = False
-
-# Set your production domain
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
-
-# Security settings for production
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
@@ -32,8 +28,6 @@ CSRF_TRUSTED_ORIGINS = [
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
-# Database configuration
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -44,8 +38,6 @@ DATABASES = {
         "PORT": env("POSTGRES_PORT"),
     }
 }
-
-# Email configuration for production
 
 EMAIL_HOST = env.str('EMAIL_HOST')
 EMAIL_PORT = env.int('EMAIL_PORT')
@@ -58,12 +50,7 @@ DEFAULT_FROM_EMAIL = env.str('DEFAULT_FROM_EMAIL')
 BREVO_API_KEY = env.str('BREVO_API_KEY')
 BREVO_FROM_EMAIL = env.str('BREVO_FROM_EMAIL')
 BREVO_FROM_NAME = env.str('BREVO_FROM_NAME')
-
-
-# Static files with WhiteNoise
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-
-# Production logging
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

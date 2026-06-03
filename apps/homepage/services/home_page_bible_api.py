@@ -1,4 +1,3 @@
-# services.py
 import random
 import requests
 from datetime import date, timedelta
@@ -75,34 +74,19 @@ class BibleAPIService:
     def get_random_verse_dynamically(self, bible_version, user_preferences=None):
         """Get completely random verse from any book/chapter"""
         try:
-            # First, get all available books
             books = self._get_all_books(bible_version)
             if not books:
                 return self._get_emergency_fallback()
-            
-            # Filter books based on user preferences if needed
             selected_books = self._filter_books_by_preference(books, user_preferences)
-            
-            # Pick random book
             random_book = random.choice(selected_books)
-            
-            # Get chapters for that book
             chapters = self._get_chapters(bible_version, random_book['id'])
             if not chapters:
                 return self._get_emergency_fallback()
-            
-            # Pick random chapter
             random_chapter = random.choice(chapters)
-            
-            # Get verses from that chapter
             verses = self._get_chapter_verses(bible_version, random_chapter['id'])
             if not verses:
                 return self._get_emergency_fallback()
-            
-            # Pick random verse
             random_verse = random.choice(verses)
-            
-            # Get verse content
             return self._get_verse_content(bible_version, random_verse['id'])
             
         except Exception as e:
@@ -126,8 +110,6 @@ class BibleAPIService:
         """Filter books based on user preferences"""
         if not preferences:
             return books
-        
-        # Define book categories
         comfort_books = ['PSA', 'ISA', 'JHN', 'ROM', 'PHP', '1PE', '2CO']
         wisdom_books = ['PRO', 'ECC', 'JOB', 'JAM']
         new_testament = ['MAT', 'MAR', 'LUK', 'JHN', 'ACT', 'ROM', 'GAL', 'EPH', 'PHP', 'COL', '1TH', '2TH']
@@ -136,18 +118,12 @@ class BibleAPIService:
         bible_familiarity = preferences.get('bible_familiarity', '').lower() if preferences.get('bible_familiarity') else ''
         
         preferred_books = []
-        
-        # Based on journey reason
         if 'comfort' in journey_reason:
             preferred_books.extend(comfort_books)
         elif 'wisdom' in journey_reason or 'guidance' in journey_reason:
             preferred_books.extend(wisdom_books)
-        
-        # Based on familiarity
         if 'beginner' in bible_familiarity:
             preferred_books.extend(new_testament[:4])  # Gospels for beginners
-        
-        # Filter actual books
         if preferred_books:
             filtered = [book for book in books if book.get('abbreviation') in preferred_books]
             return filtered if filtered else books
@@ -163,7 +139,6 @@ class BibleAPIService:
             response = requests.get(url, headers=headers, timeout=10)
             if response.status_code == 200:
                 chapters = response.json().get('data', [])
-                # Remove intro chapters (they usually don't have verses)
                 return [ch for ch in chapters if not ch.get('number', '').startswith('intro')]
         except Exception as e:
             print(f"Error getting chapters: {e}")
@@ -178,7 +153,6 @@ class BibleAPIService:
             response = requests.get(url, headers=headers, timeout=10)
             if response.status_code == 200:
                 verses = response.json().get('data', [])
-                # Limit to reasonable verse length (avoid very long verses)
                 return verses[:50] if len(verses) > 50 else verses
         except Exception as e:
             print(f"Error getting verses: {e}")
@@ -206,9 +180,7 @@ class BibleAPIService:
     def _clean_verse_text(self, text):
         """Clean verse text from HTML tags and extra formatting"""
         import re
-        # Remove HTML tags
         clean_text = re.sub(r'<[^>]+>', '', text)
-        # Remove extra whitespace
         clean_text = ' '.join(clean_text.split())
         return clean_text.strip()
     
@@ -244,12 +216,9 @@ class DailyVerseService:
     
     def get_daily_verse(self):
         """Get or create daily verse for user - SAME verse for 24 hours"""
-        # Check for existing valid verse (within 24 hours)
         existing_verse = self._get_current_valid_verse()
         if existing_verse:
             return existing_verse
-        
-        # Generate completely new dynamic verse
         return self._generate_new_dynamic_verse()
     
     def _get_current_valid_verse(self):
@@ -263,14 +232,8 @@ class DailyVerseService:
         """Generate completely new dynamic verse"""
         preferences = self.preference_service.get_preferences()
         bible_version = preferences.get('bible_version') or self._get_default_bible_version()
-        
-        # Get completely random verse from API
         verse_data = self.bible_api.get_random_verse_dynamically(bible_version, preferences)
-        
-        # Delete any old verses for this user to keep database clean
         DailyVerse.objects.filter(user=self.user).delete()
-        
-        # Create new verse record
         return DailyVerse.objects.create(
             user=self.user,
             verse_id=verse_data['verse_id'],

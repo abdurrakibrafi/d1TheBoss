@@ -70,23 +70,17 @@ class InitiateRegistrationSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
 
     def validate_email(self, value):
-        # Remove the validation error - we'll handle this in the view
         return value
 
     def send_registration_otp(self, email):
-        # Check if active user already exists
         if User.objects.filter(email=email, is_active=True).exists():
             return None, "User with this email already exists."
-
-        # Check if inactive user exists (unverified)
         try:
             user = User.objects.get(email=email, is_active=False)
-            # Mark any existing unused verification OTPs as used
             OTP.objects.filter(
                 user=user, purpose="verification", is_used=False
             ).update(is_used=True)
         except User.DoesNotExist:
-            # Create inactive user first
             user = User.objects.create(
                 email=email,
                 is_active=False,
@@ -125,8 +119,6 @@ class CompleteRegistrationSerializer(serializers.Serializer):
 
         try:
             user = User.objects.get(email=email)
-
-            # SMART CHECK: Look for unused password_setup OTP instead
             password_setup_otp_exists = OTP.objects.filter(
                 user=user, purpose="password_setup", is_used=False
             ).exists()
@@ -162,12 +154,8 @@ class CompleteRegistrationSerializer(serializers.Serializer):
         user = self.validated_data["user"]
         otp = self.validated_data["otp_object"]
         password = self.validated_data["password"]
-
-        # Mark OTP as used
         otp.is_used = True
         otp.save()
-
-        # Set password
         user.set_password(password)
         user.save()
 
@@ -196,16 +184,10 @@ class VerifyEmailSerializer(serializers.Serializer):
 
             if not otp.is_valid():
                 raise serializers.ValidationError({"otp": "OTP has expired."})
-
-            # Mark verification OTP as used
             otp.is_used = True
             otp.save()
-
-            # Activate user
             user.is_active = True
             user.save()
-
-            # Create password_setup OTP
             OTP.objects.create(
                 user=user,
                 purpose="password_setup",
@@ -356,7 +338,6 @@ class ResendOTPSerializer(serializers.Serializer):
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            # For security, pretend success — don't expose info
             attrs["user"] = None
             return attrs
 
@@ -376,7 +357,6 @@ class ResendOTPSerializer(serializers.Serializer):
 
         if purpose == "verification":
             if user:
-                # Mark old OTPs as used
                 OTP.objects.filter(
                     user=user, purpose="verification", is_used=False
                 ).update(is_used=True)
@@ -422,7 +402,6 @@ class AccountRestoreSerializer(serializers.Serializer):
             )
         if not user.is_deleted:
             raise serializers.ValidationError({"email": "This account is not deleted."})
-        # Store the user in the serializer for later use
         self.user = user
         return value
 
@@ -439,29 +418,21 @@ class SocialAuthSerializer(serializers.Serializer):
         email = self.validated_data["email"]
         provider = self.validated_data["provider"]
         name = self.validated_data.get("name", "")
-
-        # Check if user exists
         try:
             user = User.objects.get(email=email)
-            # User exists, just login
             if not user.is_active:
                 user.is_active = True
                 user.save()
-
-            # Update provider if not set
             if not user.social_auth_provider:
                 user.social_auth_provider = provider
                 user.save()
 
         except User.DoesNotExist:
-            # Create new user
             user = User.objects.create(
                 email=email,
                 is_active=True,
                 social_auth_provider=provider,  # Set provider
             )
-
-        # Update profile with social data
         if name and hasattr(user, "profile"):
             user.profile.name = name
             user.profile.save()
@@ -549,8 +520,6 @@ class VerifyEmailChangeSerializer(serializers.Serializer):
 
 
 class ResendEmailChangeOTPSerializer(serializers.Serializer):
-    # This serializer doesn't need any input fields since it just resends OTP
-    # to the temp_email already stored in the user's profile
     pass
 
 

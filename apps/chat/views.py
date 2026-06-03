@@ -15,9 +15,6 @@ import asyncio
 import json
 from apps.core.utils.mixins import BaseResponseMixin
 from apps.chat.serializers import ChatMessageSerializer, ChatSessionSerializer, ChatSessionDetailSerializer
-
-
-# API Views
 class CreateChatSessionView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
     
@@ -37,8 +34,6 @@ class CreateChatSessionView(BaseResponseMixin, APIView):
                     session.title = f"Bible Conversation - {timezone.now().strftime('%B %d')}"
                 session.save()
                 print(f"DEBUG - Session saved! is_saved now: {session.is_saved}")
-
-            # DEBUG - print what we're about to delete
             leftover = ChatSession.objects.filter(
                 user=request.user,
                 is_saved=False,
@@ -53,8 +48,6 @@ class CreateChatSessionView(BaseResponseMixin, APIView):
             count = leftover.count()
             leftover.delete()
             print(f"DEBUG - Cleaned up {count} leftover temp sessions")
-
-            # Now create ONE fresh temp session
             new_conversation = ConversationManager(user=request.user)
             new_session = new_conversation.session
             print(f"DEBUG - New temp session created: {new_session.id}")
@@ -92,7 +85,6 @@ class StartChatSessionView(BaseResponseMixin, APIView):
     def post(self, request):
         print("DEBUG - StartChatSessionView.post: Starting new session")
         try:
-            # Check if unsaved temp session already exists
             existing_session = ChatSession.objects.filter(
                 user=request.user,
                 is_saved=False,
@@ -100,15 +92,12 @@ class StartChatSessionView(BaseResponseMixin, APIView):
             ).order_by('-created_at').first()
 
             if existing_session:
-                # Return same temp session
                 serializer = ChatSessionSerializer(existing_session)
                 print(f"DEBUG - StartChatSessionView.post: Resumed existing session {existing_session.id}")
                 return self.success_response(
                     data=serializer.data,
                     message="Resumed existing session"
                 )
-
-            # No temp session exists — create fresh one
             conversation_manager = ConversationManager(user=request.user)
             new_session = conversation_manager.session
             print(f"DEBUG - StartChatSessionView.post: Created new session {new_session.id}")
@@ -224,8 +213,6 @@ class ChatSessionDeleteView(BaseResponseMixin, APIView):
                 id=session_id,
                 user=request.user
             )
-            
-            # Hard delete - completely remove the session and all related messages
             session.delete()
             
             return self.success_response(
@@ -296,24 +283,17 @@ class RegenerateResponseView(BaseResponseMixin, APIView):
     
     def post(self, request, message_id):
         try:
-            # Get the AI message to regenerate
             ai_message = ChatMessage.objects.get(
                 id=message_id,
                 session__user=request.user,
                 is_user=False
             )
-            
-            # Get the conversation manager
             conversation_manager = ConversationManager(
                 user=request.user,
                 session_id=str(ai_message.session.id)
             )
-            
-            # Get conversation history up to this point
             conversation_history = conversation_manager.format_for_ai()
             user_context = conversation_manager.get_user_spiritual_context()
-            
-            # Generate new AI response
             ai_core = AIChatCore()
             ai_response_data = ai_core.generate_bible_response(
                 conversation_history=conversation_history,
@@ -322,7 +302,6 @@ class RegenerateResponseView(BaseResponseMixin, APIView):
             )
             
             if ai_response_data["success"]:
-                # Update the existing message
                 ai_message.content = ai_response_data["content"]
                 ai_message.model_used = ai_response_data.get("model_used", "")
                 ai_message.tokens_consumed = ai_response_data.get("tokens_used", 0)
@@ -330,8 +309,6 @@ class RegenerateResponseView(BaseResponseMixin, APIView):
                 ai_message.ai_metadata = ai_response_data
                 ai_message.updated_at = timezone.now()
                 ai_message.save()
-                
-                # Update session tokens
                 ai_message.session.tokens_used += ai_response_data.get("tokens_used", 0)
                 ai_message.session.save()
                 
@@ -365,20 +342,14 @@ class SearchChatHistoryView(BaseResponseMixin, generics.ListAPIView):
         
         if not query:
             return ChatMessage.objects.none()
-        
-        # Search in message content
         queryset = ChatMessage.objects.filter(
             session__user=self.request.user,
             session__is_active=True,
             content__icontains=query
         ).order_by('-created_at')
-        
-        # Filter by session if provided
         session_id = self.request.query_params.get('session_id')
         if session_id:
             queryset = queryset.filter(session_id=session_id)
-        
-        # Filter by message type if provided
         message_type = self.request.query_params.get('type')
         if message_type == 'user':
             queryset = queryset.filter(is_user=True)
@@ -450,8 +421,6 @@ class NeedMoreClarityView(BaseResponseMixin, APIView):
             )
  
             needs_clarity = request.data.get('needs_clarity', True)
- 
-            # Record feedback
             metadata = ai_message.ai_metadata or {}
             metadata['clarity_feedback'] = {
                 'needs_clarity': needs_clarity,
@@ -459,8 +428,6 @@ class NeedMoreClarityView(BaseResponseMixin, APIView):
             }
             ai_message.ai_metadata = metadata
             ai_message.save()
- 
-            # Get user's tone preference
             conversation_manager = ConversationManager(
                 user=request.user,
                 session_id=str(ai_message.session.id)
@@ -474,7 +441,6 @@ class NeedMoreClarityView(BaseResponseMixin, APIView):
             ai_core = AIChatCore()
  
             if needs_clarity:
-                # YES → deeper expansion
                 result = ai_core.generate_clarification_yes(
                     original_response=ai_message.content,
                     tone=tone,
@@ -496,7 +462,6 @@ class NeedMoreClarityView(BaseResponseMixin, APIView):
                         message="Clarification provided"
                     )
             else:
-                # NO → follow-up question suggestion
                 result = ai_core.generate_clarification_no(
                     original_response=ai_message.content,
                     tone=tone,
@@ -513,7 +478,6 @@ class NeedMoreClarityView(BaseResponseMixin, APIView):
                             'needs_clarity': False,
                             'clarification_provided': True,
                             'show_clarification': False,
-                            # Frontend renders '— or —\nStart a new chat' below this
                             'show_new_chat_option': True,
                             'continuation_message': ChatMessageSerializer(new_message).data
                         },
@@ -591,7 +555,6 @@ class ExportChatHistoryView(BaseResponseMixin, APIView):
             }
             
             for session in sessions:
-                            # Get first user message as preview
                 first_user_msg = session.messages.filter(is_user=True).order_by('created_at').first()
                 preview = ""
                 if first_user_msg and first_user_msg.content:
@@ -620,8 +583,6 @@ class ExportChatHistoryView(BaseResponseMixin, APIView):
                         'voice_file_url': None,
                         'created_at': message.created_at.isoformat(),
                     }
-                    
-                    # Add voice file URL if exists
                     if message.voice_file:
                         message_data['voice_file_url'] = message.voice_file.url
                     
@@ -684,8 +645,6 @@ class VoiceToTextAPIView(BaseResponseMixin, APIView):
                     message='session_id is required',
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
-                
-            # Check if session exists
             try:
                 chat_session = ChatSession.objects.get(id=session_id)
             except ChatSession.DoesNotExist:
@@ -693,21 +652,15 @@ class VoiceToTextAPIView(BaseResponseMixin, APIView):
                     message='Invalid session ID',
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
-                
-            # Check file size
             if voice_file.size > 10 * 1024 * 1024:  # 10MB limit
                 return self.error_response(
                     message='File size too large. Maximum 10MB allowed',
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
-            
-            # Save original file temporarily
             with tempfile.NamedTemporaryFile(delete=False) as temp_file:
                 for chunk in voice_file.chunks():
                     temp_file.write(chunk)
                 temp_file_path = temp_file.name
-            
-            # Convert any audio format to WAV using pydub
             try:
                 audio = AudioSegment.from_file(temp_file_path)
                 wav_file_path = temp_file_path + '.wav'
@@ -717,14 +670,10 @@ class VoiceToTextAPIView(BaseResponseMixin, APIView):
                     message=f'Invalid audio file format: {str(e)}',
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
-            
-            # Convert voice to text
             recognizer = sr.Recognizer()
             with sr.AudioFile(wav_file_path) as source:
                 audio_data = recognizer.record(source)
                 text = recognizer.recognize_google(audio_data)
-            
-            # Clean up temp files
             self._cleanup_files(temp_file_path, wav_file_path)
             
             if not text:
@@ -732,8 +681,6 @@ class VoiceToTextAPIView(BaseResponseMixin, APIView):
                     message='No speech detected in the audio file',
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
-            
-            # Create ChatMessage with both voice file and transcript
             message = ChatMessage.objects.create(
                 session=chat_session,
                 content=text,  # The transcript
@@ -742,8 +689,6 @@ class VoiceToTextAPIView(BaseResponseMixin, APIView):
                 voice_file=voice_file,  # Save the original audio file
                 has_voice=True
             )
-            
-            # Update session message count
             chat_session.message_count += 1
             chat_session.save()
                 

@@ -2,27 +2,15 @@ import environ
 from pathlib import Path
 import os
 from datetime import timedelta
-
-# Initialize environ
 env = environ.Env()
-
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-# Read .env file
 env_file = os.path.join(BASE_DIR, ".env")
 if os.path.exists(env_file):
     environ.Env.read_env(env_file)
-
-# SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env("SECRET_KEY", default="your-default-secret-key-change-this")
-
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DEBUG", default=True)
 
 ALLOWED_HOSTS = ["*", "localhost", "127.0.0.1", "0.0.0.0"]
-
-# Application definition
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -31,7 +19,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.sites",
-    # Third party apps
     "rest_framework",
     "rest_framework.authtoken",
     "rest_framework_simplejwt",
@@ -45,7 +32,6 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.google",
     "channels",
     "django_celery_beat",
-    # Local apps
     "apps.accounts",
 ]
 
@@ -82,8 +68,6 @@ TEMPLATES = [
         },
     },
 ]
-
-# Database
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -94,8 +78,6 @@ DATABASES = {
         "PORT": env("POSTGRES_PORT", default="5432"),
     }
 }
-
-# JWT settings
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
@@ -118,11 +100,7 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 SITE_ID = 1
-
-# CORS settings
 CORS_ALLOW_ALL_ORIGINS = True
-
-# Social auth settings
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
         "APP": {
@@ -142,8 +120,6 @@ SOCIALACCOUNT_PROVIDERS = {
 
 GOOGLE_CALLBACK_URL = env("GOOGLE_CALLBACK_URL", default="")
 APPLE_CALLBACK_URL = env("APPLE_CALLBACK_URL", default="")
-
-# REST Framework settings
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -164,12 +140,8 @@ REST_AUTH = {
     "JWT_AUTH_REFRESH_COOKIE": "jwt-refresh",
     "JWT_AUTH_HTTPONLY": False,
 }
-
-# Allauth settings
 ACCOUNT_LOGIN_METHOD = "email"
 ACCOUNT_SIGNUP_FIELDS = ["email"]
-
-# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
@@ -187,20 +159,14 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
-
-# Internationalization
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
-
-# Static files (CSS, JavaScript, Images)
 STATIC_URL = "static/"
 MEDIA_URL = "media/"
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
-
-# Email configuration
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = "sandbox.smtp.mailtrap.io"
 EMAIL_HOST_USER = "402fd32284be3c"
@@ -210,8 +176,6 @@ EMAIL_USE_TLS = True
 DEFAULT_FROM_EMAIL = "no-reply@example.com"
 
 APP_NAME = env("APP_NAME", default="Bibel")
-
-# Redis configuration for Channels
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
@@ -220,18 +184,12 @@ CHANNEL_LAYERS = {
         },
     },
 }
-
-# API Keys
 OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
 STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY", default="")
 STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
 STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="")
-
-# Stripe Configuration
 STRIPE_LIVE_MODE = False
 STRIPE_CURRENCY = "usd"
-
-# Logging
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

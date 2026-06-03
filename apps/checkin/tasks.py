@@ -30,7 +30,6 @@ def create_weekly_checkins_for_all_users():
 
     for user in users:
         try:
-            # Mark last week missed if still available
             last_week_start = week_start - timedelta(days=7)
             last_week_checkin = UserWeeklyCheckin.objects.filter(
                 user=user,
@@ -43,11 +42,7 @@ def create_weekly_checkins_for_all_users():
                 last_week_checkin.is_available = False
                 last_week_checkin.save()
                 missed_count += 1
-
-                # Reset weekly streak since week was missed
                 _reset_weekly_streak(user)
-
-            # Create new week
             existing_weeks = UserWeeklyCheckin.objects.filter(user=user).count()
             next_week_num = existing_weeks + 1
 
@@ -97,7 +92,6 @@ def _update_weekly_streak(user):
         streak.current_weekly_streak += 1
         if streak.current_weekly_streak > streak.longest_weekly_streak:
             streak.longest_weekly_streak = streak.current_weekly_streak
-        # Red flame = 2 or more consecutive completed weeks
         streak.has_red_flame = streak.current_weekly_streak >= 2
         streak.save()
         return streak
@@ -141,16 +135,12 @@ def check_and_award_badges_task(user_id):
         user = User.objects.get(id=user_id)
     except User.DoesNotExist:
         return "User not found"
-
-    # Count TOTAL completed weeks — not streak, not consecutive
     total_completed = UserWeeklyCheckin.objects.filter(
         user=user,
         status='completed'
     ).count()
 
     logger.info(f"Badge check for user {user.id}: {total_completed} completed weeks")
-
-    # Correct badge type mapping per client doc
     milestone_to_badge_type = {
         1:  'week_1',   # Seed Planted
         2:  'week_2',   # Rooted in Grace
@@ -164,7 +154,6 @@ def check_and_award_badges_task(user_id):
     newly_awarded = []
 
     for milestone in BADGE_MILESTONES:
-        # Only award if user has reached this milestone
         if total_completed >= milestone:
             badge_type = milestone_to_badge_type.get(milestone)
             if not badge_type:
@@ -238,8 +227,6 @@ def send_weekly_checkin_reminder():
     
     today = timezone.now()
     day_of_week = today.weekday()  # Mon=0, Sun=6
-
-    # Different message per day
     if day_of_week == 6:  # Sunday
         title = "🌿 Time to Reflect"
         message = "Time to reflect on your week. Your weekly check-in is ready."
@@ -252,8 +239,6 @@ def send_weekly_checkin_reminder():
     else:
         title = "📖 Weekly Check-In Reminder"
         message = "Don't forget to complete your weekly check-in."
-
-    # Only send to users who have an available (not completed) week
     pending_checkins = UserWeeklyCheckin.objects.filter(
         week_start=week_start,
         status='available'

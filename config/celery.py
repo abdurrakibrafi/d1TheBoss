@@ -9,7 +9,6 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 app.autodiscover_tasks()
 
 app.conf.beat_schedule = {
-    # Week management
     'close-week-saturday-midnight': {
         'task': 'checkin.close_week_on_saturday',
         'schedule': crontab(hour=0, minute=0, day_of_week='sunday'),
@@ -18,7 +17,6 @@ app.conf.beat_schedule = {
         'task': 'checkin.create_weekly_checkins_for_all_users',
         'schedule': crontab(hour=0, minute=1, day_of_week='sunday'),
     },
-    # Weekly reminders
     'weekly-reminder-sunday': {
         'task': 'checkin.send_weekly_checkin_reminder',
         'schedule': crontab(hour=18, minute=0, day_of_week='sunday'),

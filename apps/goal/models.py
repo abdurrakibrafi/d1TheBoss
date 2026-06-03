@@ -1,4 +1,3 @@
-# models.py - Goal tracking models
 
 from django.db import models
 from apps.accounts.models import User 
@@ -63,8 +62,6 @@ class UserGoal(models.Model):
         from .utils import get_user_primary_goal_type
         
         today = timezone.now().date()
-        
-        # Calculate week start based on user's onboarding cycle, not Monday.
         try:
             onboarding_date = user.date_joined.date()
             days_since_start = (today - onboarding_date).days

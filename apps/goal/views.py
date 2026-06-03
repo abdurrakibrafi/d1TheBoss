@@ -1,4 +1,3 @@
-# apps/goals/views.py
 
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
@@ -19,17 +18,12 @@ class TrackScriptureReadingView(BaseResponseMixin, APIView):
     def post(self, request):
         """API to track when user reads scripture"""
         try:
-            # Create chapter read record
             ChapterRead.objects.create(
                 user=request.user,
                 bible_id='bible',
                 chapter_id=f'chapter_{timezone.now().timestamp()}'
             )
-            
-            # Get user's weekly goal
             goal, created = UserGoal.get_or_create_weekly_goal(request.user)
-            
-            # Only increment if this week's goal is scripture
             if goal.goal_type == 'scripture':
                 completed = goal.increment_count()
                 
@@ -48,7 +42,6 @@ class TrackScriptureReadingView(BaseResponseMixin, APIView):
                     message="Scripture reading tracked and counted toward your weekly goal!"
                 )
             else:
-                # Still record the activity but don't count toward goal
                 data = {
                     'goal_completed': goal.completed,
                     'current_count': goal.current_count,
@@ -75,18 +68,13 @@ class TrackConversationInteractionView(BaseResponseMixin, APIView):
     def post(self, request):
         """API to track when user gives thumbs up"""
         try:
-            # Create interaction record
             ConversationInteraction.objects.create(
                 user=request.user,
                 content_type='conversation',
                 content_id='thumbs_up',
                 interaction_type='thumbs_up'
             )
-            
-            # Get user's weekly goal
             goal, created = UserGoal.get_or_create_weekly_goal(request.user)
-            
-            # Only increment if this week's goal is conversation
             if goal.goal_type == 'conversation':
                 completed = goal.increment_count()
                 
@@ -133,19 +121,13 @@ class TrackShareActivityView(BaseResponseMixin, APIView):
         try:
             import time
             content_id = f'share_{int(time.time() * 1000)}'
-            
-            # Create share record
             ShareActivity.objects.create(
                 user=request.user,
                 content_type='share',
                 content_id=content_id,
                 share_platform=request.data.get('platform', 'app')
             )
-            
-            # Get user's weekly goal
             goal, created = UserGoal.get_or_create_weekly_goal(request.user)
-            
-            # Only increment if this week's goal is share_faith
             if goal.goal_type == 'share_faith':
                 completed = goal.increment_count()
                 
@@ -190,7 +172,6 @@ class GetCurrentWeekGoalsView(BaseResponseMixin, APIView):
     def get(self, request):
         """Get current week's single goal based on user's faith preferences"""
         try:
-            # Get user's weekly goal
             goal, created = UserGoal.get_or_create_weekly_goal(request.user)
             
             today = timezone.now().date()
@@ -231,8 +212,6 @@ class GetGoalsHistoryView(BaseResponseMixin, APIView):
         """Get weekly goals history"""
         try:
             weeks = int(request.query_params.get('weeks', 8))
-            
-            # Get user's goal history
             goals_history = UserGoal.objects.filter(user=request.user).order_by('-week_start')[:weeks]
             
             history = []
@@ -279,11 +258,7 @@ class SetGoalTargetView(BaseResponseMixin, APIView):
                     message="Invalid target count",
                     errors={'target_count': ['Target count must be greater than 0']}
                 )
-            
-            # Get current week's goal
             goal, created = UserGoal.get_or_create_weekly_goal(request.user)
-            
-            # Update target
             goal.target_count = target_count
             goal.save()
             
@@ -311,11 +286,7 @@ class GoalStatsView(BaseResponseMixin, APIView):
         """Get comprehensive goal statistics"""
         try:
             user = request.user
-            
-            # Get current week goal
             current_goal, created = UserGoal.get_or_create_weekly_goal(user)
-            
-            # All time stats
             all_time_stats = {
                 'total_chapters_read': ChapterRead.objects.filter(user=user).count(),
                 'total_conversations': ConversationInteraction.objects.filter(user=user).count(),
@@ -323,8 +294,6 @@ class GoalStatsView(BaseResponseMixin, APIView):
                 'total_goals_completed': UserGoal.objects.filter(user=user, completed=True).count(),
                 'weeks_active': UserGoal.objects.filter(user=user).count()
             }
-            
-            # Current week stats
             current_week_stats = {
                 'goal_type': current_goal.goal_type,
                 'goal_display': current_goal.get_goal_type_display(),
@@ -334,8 +303,6 @@ class GoalStatsView(BaseResponseMixin, APIView):
                 'progress_percentage': current_goal.progress_percentage(),
                 'days_remaining': current_goal.days_remaining
             }
-            
-            # Last 4 weeks performance
             last_4_weeks = []
             recent_goals = UserGoal.objects.filter(user=user).order_by('-week_start')[:4]
             

@@ -18,22 +18,14 @@ class ScheduledNotification(models.Model):
     title = models.CharField(max_length=255)
     message = models.TextField()
     notification_types = models.JSONField(default=list)  # ['push', 'email', 'in_app']
-    
-    # Scheduling
     scheduled_at = models.DateTimeField()
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_schedules')
-    
-    # Recipients
     recipient_type = models.CharField(max_length=20, choices=RECIPIENT_CHOICES, default='all')
     specific_users = models.ManyToManyField(User, blank=True, related_name='scheduled_notifications')
-    
-    # Status tracking
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     sent_at = models.DateTimeField(null=True, blank=True)
     sent_count = models.IntegerField(default=0)
     failed_count = models.IntegerField(default=0)
-    
-    # Extra data
     data = models.JSONField(blank=True, null=True)
     
     created_at = models.DateTimeField(auto_now_add=True)

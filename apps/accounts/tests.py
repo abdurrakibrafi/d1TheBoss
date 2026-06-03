@@ -5,11 +5,7 @@ from types import SimpleNamespace
 from apps.accounts.utils.send_otp_email import send_otp_email
 
 
-# Create your tests here.
-
-
 def _make_user(email, name="Test User"):
-    # simple object mimicking required attributes
     user = SimpleNamespace()
     user.email = email
     user.profile = SimpleNamespace(name=name)
@@ -20,7 +16,6 @@ class SendOTPEmailTests(TestCase):
     @patch("apps.accounts.utils.send_otp_email.BrevoEmailService")
     def test_default_recipient(self, mock_service_cls):
         mock_service = mock_service_cls.return_value
-        # call the helper
         user = _make_user("user@example.com", name="Alice")
         send_otp_email(user, "0000", "verification")
         mock_service.send_transactional_email.assert_called_once_with(
@@ -45,7 +40,6 @@ class SendOTPEmailTests(TestCase):
         )
 
     def test_profile_update_email_change_triggers_otp(self):
-        # ensure serializer invokes send_otp_email with the temp address
         from apps.accounts.serializers import ProfileUpdateSerializer
         from apps.accounts.models import UserProfile
         from django.contrib.auth import get_user_model

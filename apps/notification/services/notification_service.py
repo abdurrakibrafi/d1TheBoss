@@ -27,7 +27,6 @@ class NotificationService:
     
     @staticmethod
     def _dispatch_notification(user, title, message, notif_type, data):
-        # Create notification record
         notification = Notification.objects.create(
             user=user,
             title=title,
@@ -39,7 +38,6 @@ class NotificationService:
         if notif_type == 'push':
             send_push_notification.delay(notification.id)
         elif notif_type == 'in_app':
-            # In-app notifications are stored in DB and available via API; mark as sent
             notification.sent_at = timezone.now()
             notification.save()
         elif notif_type == 'email':

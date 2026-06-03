@@ -1,4 +1,3 @@
-# views.py - Updated with your existing BaseResponseMixin
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -14,7 +13,6 @@ from apps.subscription.models import UserSubscription, SubscriptionPlan, Payment
 from apps.subscription.serializers import SubscriptionPlanSerializer, UserSubscriptionSerializer, PaymentMethodSerializer
 from zoneinfo import ZoneInfo
 from apps.notification.services.notification_service import NotificationService
-# Import your existing mixin
 from apps.core.utils.mixins import BaseResponseMixin  # Adjust import path as needed
 
 class SubscriptionMixin(BaseResponseMixin):
@@ -23,16 +21,12 @@ class SubscriptionMixin(BaseResponseMixin):
     def get_subscription_plan(self, plan_identifier):
         """Get subscription plan by ID or plan_type"""
         try:
-            # Try to get by ID first (if it's a number)
             if str(plan_identifier).isdigit():
                 return SubscriptionPlan.objects.get(id=int(plan_identifier), is_active=True)
             else:
-                # Try to get by plan_type
                 return SubscriptionPlan.objects.get(plan_type=plan_identifier, is_active=True)
         except SubscriptionPlan.DoesNotExist:
             return None
-
-# Create mixin instance to use in function-based views
 mixin = SubscriptionMixin()
 
 @api_view(['GET'])
@@ -42,28 +36,19 @@ def subscription_status(request):
     try:
         subscription = UserSubscription.objects.get(user=request.user)
         serializer = UserSubscriptionSerializer(subscription)
-        
-        # Add helpful status information for frontend
         status_data = serializer.data
         status_data.update({
-            # Core status fields
             'is_active': subscription.is_active(),
             'is_canceled': subscription.canceled_at is not None,
             'is_trial_active': subscription.is_trial_active(),
-            
-            # Frontend display helpers
             'subscription_state': get_subscription_state(subscription),
             'display_message': get_display_message(subscription),
             'action_required': get_action_required(subscription),
             'show_cancel_button': should_show_cancel_button(subscription),
             'show_reactivate_button': should_show_reactivate_button(subscription),
-            
-            # Time-based info
             'days_until_trial_end': subscription.days_until_trial_end(),
             'days_until_period_end': subscription.access_ends_in_days(),
             'will_auto_renew': not subscription.canceled_at and subscription.is_active(),
-            
-            # Access info
             'has_premium_access': subscription.is_active(),
             'expires_at': subscription.trial_end if subscription.is_trial_active() else subscription.current_period_end,
         })
@@ -92,7 +77,6 @@ def subscription_status(request):
 def get_subscription_state(subscription):
     """Return a clear state for frontend logic"""
     if not subscription.canceled_at:
-        # Not canceled
         if subscription.status == 'trialing':
             return 'trial_active'
         elif subscription.status == 'active':
@@ -102,7 +86,6 @@ def get_subscription_state(subscription):
         else:
             return subscription.status
     else:
-        # Canceled
         if subscription.is_active():
             if subscription.is_trial_active():
                 return 'trial_canceled_but_active'
@@ -201,11 +184,7 @@ def add_payment_method(request):
         stripe.api_key = settings.STRIPE_SECRET_KEY
         
         user_subscription = UserSubscription.objects.get(user=request.user)
-        
-        # Get payment method details from Stripe
         payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
-        
-        # Check if payment method already exists
         existing_pm = PaymentMethod.objects.filter(
             user=request.user,
             stripe_payment_method_id=payment_method_id
@@ -219,11 +198,7 @@ def add_payment_method(request):
                 },
                 message="Payment method already exists"
             )
-        
-        # Set all other payment methods to not default
         PaymentMethod.objects.filter(user=request.user).update(is_default=False)
-        
-        # Save to database
         pm = PaymentMethod.objects.create(
             user=request.user,
             stripe_payment_method_id=payment_method_id,
@@ -256,7 +231,6 @@ def add_payment_method(request):
 @permission_classes([IsAuthenticated])
 def create_subscription(request):
     """Create a new subscription - accepts plan_id OR plan_type"""
-    # Support both plan_id and plan_type for flexibility
     plan_identifier = request.data.get('plan_id') or request.data.get('plan_type')
     payment_method_id = request.data.get('payment_method_id')
     
@@ -268,8 +242,6 @@ def create_subscription(request):
     
     try:
         stripe.api_key = settings.STRIPE_SECRET_KEY
-        
-        # Get the subscription plan using our helper method
         plan = mixin.get_subscription_plan(plan_identifier)
         if not plan:
             return mixin.not_found_response(
@@ -282,8 +254,6 @@ def create_subscription(request):
             return mixin.bad_request_response(
                 message="User already has an active subscription"
             )
-        
-        # Re-attach the payment method if it fails
         if payment_method_id:
             try:
                 stripe.PaymentMethod.attach(
@@ -292,31 +262,21 @@ def create_subscription(request):
                 )
             except:
                 pass  # Already attached or other issue
-                
-        # Create subscription
         subscription = StripeService.create_subscription(
             user_subscription.stripe_customer_id,
             plan.stripe_price_id,
             payment_method_id
         )
-
-        # Debug: Print subscription object (remove in production)
         print(f"DEBUG: Subscription object: {subscription}")
         print(f"DEBUG: Subscription status: {subscription.status}")
-        
-        # Update user subscription
         user_subscription.stripe_subscription_id = subscription.id
         user_subscription.subscription_plan = plan
         user_subscription.status = subscription.status
-        
-        # Handle period dates - for trialing subscriptions, use billing_cycle_anchor
-         # Handle period dates - for trialing subscriptions, use billing_cycle_anchor
         if hasattr(subscription, 'current_period_start') and subscription.current_period_start:
             user_subscription.current_period_start = timezone.datetime.fromtimestamp(
                 subscription.current_period_start, tz=ZoneInfo("UTC")
             )
         elif hasattr(subscription, 'billing_cycle_anchor') and subscription.billing_cycle_anchor:
-            # For trialing subscriptions, the billing cycle anchor is when billing will start
             user_subscription.current_period_start = timezone.datetime.fromtimestamp(
                 subscription.start_date, tz=ZoneInfo("UTC")
             )
@@ -326,12 +286,9 @@ def create_subscription(request):
                 subscription.current_period_end, tz=ZoneInfo("UTC")
             )
         elif hasattr(subscription, 'billing_cycle_anchor') and subscription.billing_cycle_anchor:
-            # For trialing subscriptions, use billing_cycle_anchor as the end of trial/start of billing
             user_subscription.current_period_end = timezone.datetime.fromtimestamp(
                 subscription.billing_cycle_anchor, tz=ZoneInfo("UTC")
             )
-            
-        # Handle trial dates
         if hasattr(subscription, 'trial_start') and subscription.trial_start:
             user_subscription.trial_start = timezone.datetime.fromtimestamp(
                 subscription.trial_start, tz=ZoneInfo("UTC")
@@ -373,15 +330,11 @@ def create_subscription(request):
             message="Please create setup intent first"
         )
     except KeyError as e:
-        # Log the specific missing key for debugging
         print(f"API Exception: KeyError: {str(e)}")
         return mixin.handle_exception(Exception(f"Missing subscription field: {str(e)}"))
     except Exception as e:
         print(f"API Exception: {type(e).__name__}: {str(e)}")
         return mixin.handle_exception(e)
-    
-
-# 1. UPDATED CANCEL SUBSCRIPTION VIEW
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def cancel_subscription(request):
@@ -397,19 +350,10 @@ def cancel_subscription(request):
         subscription = StripeService.cancel_subscription(
             user_subscription.stripe_subscription_id
         )
-        
-        # Update cancellation timestamp
         user_subscription.canceled_at = timezone.now()
-        
-        # Update status from Stripe response
         user_subscription.status = subscription.status
         
-        # DON'T set is_active = False here!
-        # Let the subscription remain active until period ends
-        
         user_subscription.save()
-
-        # Dynamic message based on when access ends
         if user_subscription.current_period_end:
             access_message = f"Your subscription will remain active until {user_subscription.current_period_end.strftime('%B %d, %Y')}"
         else:
@@ -488,7 +432,6 @@ def setup_subscription_plans(request):
     try:
         for plan_data in plans_data:
             try:
-                # Check if plan already exists
                 existing_plan = SubscriptionPlan.objects.filter(
                     plan_type=plan_data['plan_type']
                 ).first()
@@ -502,22 +445,16 @@ def setup_subscription_plans(request):
                         'price': str(existing_plan.price)
                     })
                     continue
-                
-                # Create product in Stripe
                 product = stripe.Product.create(
                     name=plan_data['name'],
                     description=plan_data['description']
                 )
-                
-                # Create price in Stripe
                 price = stripe.Price.create(
                     product=product.id,
                     unit_amount=int(plan_data['price'] * 100),  # Convert to cents
                     currency='usd',
                     recurring={'interval': plan_data['interval']},
                 )
-                
-                # Create in database
                 plan = SubscriptionPlan.objects.create(
                     name=plan_data['name'],
                     plan_type=plan_data['plan_type'],
@@ -607,37 +544,26 @@ def switch_subscription(request):
             return mixin.not_found_response(
                 message="No active subscription found"
             )
-        
-        # Get the new plan
         new_plan = mixin.get_subscription_plan(plan_identifier)
         if not new_plan:
             return mixin.not_found_response(
                 message=f"Subscription plan '{plan_identifier}' not found or inactive"
             )
-        
-        # Don't allow switching to the same plan
         if user_subscription.subscription_plan == new_plan:
             return mixin.bad_request_response(
                 message="Already subscribed to this plan"
             )
-        
-        # Update the subscription in Stripe
         updated_subscription = StripeService.update_subscription(
             user_subscription.stripe_subscription_id,
             new_plan.stripe_price_id
         )
-        
-        # Update our database with the new plan
         user_subscription.subscription_plan = new_plan
         user_subscription.status = updated_subscription.status
-        
-        # Handle period dates with proper checks (same as create function)
         if hasattr(updated_subscription, 'current_period_start') and updated_subscription.current_period_start:
             user_subscription.current_period_start = timezone.datetime.fromtimestamp(
                 updated_subscription.current_period_start, tz=ZoneInfo("UTC")
             )
         elif hasattr(updated_subscription, 'billing_cycle_anchor') and updated_subscription.billing_cycle_anchor:
-            # For trialing subscriptions, the billing cycle anchor is when billing will start
             user_subscription.current_period_start = timezone.datetime.fromtimestamp(
                 updated_subscription.start_date, tz=ZoneInfo("UTC")
             )
@@ -647,12 +573,9 @@ def switch_subscription(request):
                 updated_subscription.current_period_end, tz=ZoneInfo("UTC")
             )
         elif hasattr(updated_subscription, 'billing_cycle_anchor') and updated_subscription.billing_cycle_anchor:
-            # For trialing subscriptions, use billing_cycle_anchor as the end of trial/start of billing
             user_subscription.current_period_end = timezone.datetime.fromtimestamp(
                 updated_subscription.billing_cycle_anchor, tz=ZoneInfo("UTC")
             )
-            
-        # Handle trial dates (important for switches during trial period)
         if hasattr(updated_subscription, 'trial_start') and updated_subscription.trial_start:
             user_subscription.trial_start = timezone.datetime.fromtimestamp(
                 updated_subscription.trial_start, tz=ZoneInfo("UTC")
@@ -691,7 +614,6 @@ def switch_subscription(request):
             message="No subscription found"
         )
     except KeyError as e:
-        # Log the specific missing key for debugging
         print(f"Switch API Exception: KeyError: {str(e)}")
         return mixin.handle_exception(Exception(f"Missing subscription field: {str(e)}"))
     except Exception as e:
@@ -705,8 +627,6 @@ def reactivate_subscription(request):
     """Reactivate a canceled subscription"""
     try:
         user_subscription = UserSubscription.objects.get(user=request.user)
-        
-        # Check if subscription can be reactivated
         if not user_subscription.stripe_subscription_id:
             return mixin.not_found_response(
                 message="No subscription found"
@@ -721,15 +641,11 @@ def reactivate_subscription(request):
             return mixin.bad_request_response(
                 message="Subscription has already ended. Please create a new subscription."
             )
-        
-        # Reactivate in Stripe
         stripe.api_key = settings.STRIPE_SECRET_KEY
         subscription = stripe.Subscription.modify(
             user_subscription.stripe_subscription_id,
             cancel_at_period_end=False  # This reactivates it
         )
-        
-        # Clear cancellation in our database
         user_subscription.canceled_at = None
         user_subscription.status = subscription.status
         user_subscription.save()

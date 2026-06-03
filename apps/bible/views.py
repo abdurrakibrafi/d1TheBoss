@@ -1,4 +1,3 @@
-# Updated views.py
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -20,11 +19,7 @@ class BibleVersionListView(BaseResponseMixin, APIView):
     def get(self, request):
         service = BibleAPIService()
         versions = service.get_bible_versions()
-        
-        # Get user's preferred Bible version
         user_preferred_id = self.get_user_preferred_bible_id(request.user)
-        
-        # Mark user's preferred version
         for version in versions:
             version['is_default'] = version['id'] == user_preferred_id
             version['is_user_preferred'] = version['id'] == user_preferred_id
@@ -46,15 +41,11 @@ class BibleVersionListView(BaseResponseMixin, APIView):
                 return user_bible_version.bible_version_option.api_bible_id
         except ImportError:
             pass
-        
-        # Fallback to reading progress bible version
         try:
             progress = ReadingProgress.objects.get(user=user)
             return progress.bible_version_id
         except ReadingProgress.DoesNotExist:
             pass
-        
-        # Final fallback
         return '06125adad2d5898a-01'  # NIV
 
 class UserPreferredBibleView(BaseResponseMixin, APIView):
@@ -66,7 +57,6 @@ class UserPreferredBibleView(BaseResponseMixin, APIView):
         Returns a dynamic default Bible version from available options
         """
         try:
-            # Try to get the first available Bible version from your options
             from apps.onboarding.models import BibleVersionOption
             default_version = BibleVersionOption.objects.first()
             if default_version:
@@ -78,8 +68,6 @@ class UserPreferredBibleView(BaseResponseMixin, APIView):
                 }
         except (ImportError, AttributeError):
             pass
-        
-        # Ultimate fallback if everything else fails
         return {
             'id': '9879dbb7cfe39e4d-01',  # WEB as a reasonable default
             'title': 'World English Bible',
@@ -92,8 +80,6 @@ class UserPreferredBibleView(BaseResponseMixin, APIView):
             from apps.onboarding.models import BibleVersion
             user_bible_version = BibleVersion.objects.get(user=request.user)
             bible_version_option = user_bible_version.bible_version_option
-            
-            # Get Bible details from API.Bible
             service = BibleAPIService()
             api_bible_id = bible_version_option.api_bible_id
             bible_details = service.get_bible_details(api_bible_id)
@@ -107,7 +93,6 @@ class UserPreferredBibleView(BaseResponseMixin, APIView):
                 }
             })
         except (ImportError, AttributeError, BibleVersion.DoesNotExist):
-            # Fallback to reading progress
             try:
                 progress = ReadingProgress.objects.get(user=request.user)
                 service = BibleAPIService()
@@ -125,8 +110,6 @@ class UserPreferredBibleView(BaseResponseMixin, APIView):
                 pass
         except Exception as e:
             logger.error(f"Error fetching preferred Bible version: {str(e)}")
-        
-        # Final fallback - now dynamic
         default_version = self.get_default_bible_version()
         return self.success_response({
             'preferred_version': default_version,
@@ -142,17 +125,11 @@ class UserPreferredBibleView(BaseResponseMixin, APIView):
         
         try:
             from apps.onboarding.models import BibleVersion, BibleVersionOption
-            
-            # Get the Bible version option
             bible_version_option = BibleVersionOption.objects.get(api_bible_id=bible_version_id)
-            
-            # Update or create user's Bible version preference
             user_bible_version, created = BibleVersion.objects.update_or_create(
                 user=request.user,
                 defaults={'bible_version_option': bible_version_option}
             )
-            
-            # Also update reading progress to use new version
             ReadingProgress.objects.update_or_create(
                 user=request.user,
                 defaults={'bible_version_id': bible_version_id}
@@ -170,7 +147,6 @@ class UserPreferredBibleView(BaseResponseMixin, APIView):
         except BibleVersionOption.DoesNotExist:
             return self.not_found_response('Specified Bible version not found')
         except ImportError:
-            # Fallback: just update reading progress
             ReadingProgress.objects.update_or_create(
                 user=request.user,
                 defaults={'bible_version_id': bible_version_id}
@@ -253,12 +229,9 @@ class ChapterContentView(APIView, BaseResponseMixin): # <--- ADDED BaseResponseM
     """GET /api/bibles/{bible_id}/chapters/{chapter_id}/ - Get chapter content"""
     def get(self, request, bible_id, chapter_id):
         service = BibleAPIService()
-        
-        # --- 1. Fetch chapter content ---
         content = service.get_chapter_content(bible_id, chapter_id)
         
         if isinstance(content, dict) and 'error' in content:
-            # Use error_response from the mixin
             status_code = content.get('statusCode', status.HTTP_400_BAD_REQUEST)
             message = content.get('error', 'Failed to retrieve chapter content.')
             
@@ -270,25 +243,19 @@ class ChapterContentView(APIView, BaseResponseMixin): # <--- ADDED BaseResponseM
                     status_code=status_code,
                     error_code="CHAPTER_CONTENT_ERROR" # Custom error code for this specific issue
                 )
-        
-        # --- 2. Add Bible version info to response ---
         bible_details = service.get_bible_details(bible_id)
         if isinstance(bible_details, dict) and 'error' in bible_details:
             status_code = bible_details.get('statusCode', status.HTTP_400_BAD_REQUEST)
             message = bible_details.get('error', 'Failed to retrieve Bible details.')
             
             if status_code == status.HTTP_404_NOT_FOUND:
-                # If the bible_id itself isn't found, this is a 404 for the whole request
                 return self.not_found_response(message=message)
             else:
-                # Other errors fetching bible_details could still be reported as server errors
                 return self.error_response(
                     message=message,
                     status_code=status_code,
                     error_code="BIBLE_DETAILS_ERROR"
                 )
-
-        # --- 3. Get navigation info ---
         nav_info = service.get_chapter_navigation(bible_id, chapter_id)
         if isinstance(nav_info, dict) and 'error' in nav_info:
             status_code = nav_info.get('statusCode', status.HTTP_400_BAD_REQUEST)
@@ -374,7 +341,6 @@ class ReadingProgressView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        # Get user's preferred Bible version
         preferred_bible_id = self.get_user_preferred_bible_id(request.user)
         
         progress, created = ReadingProgress.objects.get_or_create(
@@ -509,22 +475,16 @@ class BibleVersionSwitchView(APIView):
         if not bible_version_id:
             return Response({'error': 'bible_version_id is required'}, 
                           status=status.HTTP_400_BAD_REQUEST)
-        
-        # Validate that the Bible version exists
         service = BibleAPIService()
         bible_details = service.get_bible_details(bible_version_id)
         
         if not bible_details:
             return Response({'error': 'Invalid Bible version ID'}, 
                           status=status.HTTP_400_BAD_REQUEST)
-        
-        # Update reading progress to use this version temporarily
         progress, created = ReadingProgress.objects.get_or_create(
             user=request.user,
             defaults={'bible_version_id': bible_version_id}
         )
-        
-        # Store the current Bible version without changing user preference
         progress.bible_version_id = bible_version_id
         progress.save()
         
