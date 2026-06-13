@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from apps.homepage.models import DailyVerse
+from apps.homepage.models import DailyVerse, JourneyVerse
 
 class DailyVerseSerializer(serializers.ModelSerializer):
     bible_version_title = serializers.CharField(
@@ -23,3 +23,9 @@ class DailyVerseSerializer(serializers.ModelSerializer):
     
     def get_is_expired(self, obj):
         return obj.is_expired()
+    
+
+class JourneyVerseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JourneyVerse
+        fields = ['day_number', 'title', 'verse_text', 'verse_reference']

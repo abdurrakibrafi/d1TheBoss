@@ -43,3 +43,17 @@ class DailyVerse(models.Model):
     def __str__(self):
         user_email = self.user.email if self.user else "Unknown User"
         return f"{user_email} - {self.verse_reference}"
+    
+
+
+class JourneyVerse(models.Model):
+    day_number = models.PositiveIntegerField(unique=True) # ১ থেকে ৯০
+    title = models.CharField(max_length=255)
+    verse_text = models.TextField()
+    verse_reference = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ['day_number']
+
+    def __str__(self):
+        return f"Day {self.day_number}: {self.title}"

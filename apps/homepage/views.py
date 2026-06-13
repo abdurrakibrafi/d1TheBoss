@@ -5,6 +5,7 @@ from rest_framework import status
 from apps.homepage.services.home_page_bible_api import DailyVerseService
 from .serializers import DailyVerseSerializer 
 from apps.core.utils.mixins import BaseResponseMixin
+from django.utils import timezone
 
 class DailyVerseView(BaseResponseMixin, APIView):
     """
@@ -55,3 +56,35 @@ class RefreshDailyVerseView(BaseResponseMixin, APIView):
             return self.error_response({
                 'message': f'Error refreshing daily verse: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+
+from datetime import timezone as dt_timezone
+from .models import JourneyVerse
+from .serializers import JourneyVerseSerializer
+
+class JourneyDailyVerseView(BaseResponseMixin, APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            join_date = request.user.date_joined.date()
+            today = timezone.now().date()
+            days_passed = (today - join_date).days
+            
+            target_day = (days_passed % 90) + 1 
+            
+            verse = JourneyVerse.objects.filter(day_number=target_day).first()
+            
+            if not verse:
+
+                verse = JourneyVerse.objects.filter(day_number=1).first()
+
+            if verse:
+                serializer = JourneyVerseSerializer(verse)
+                return self.success_response(data=serializer.data)
+            else:
+                return self.error_response(message="No verses found in database.")
+
+        except Exception as e:
+            return self.handle_exception(e)
