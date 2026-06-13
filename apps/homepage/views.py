@@ -82,7 +82,10 @@ class JourneyDailyVerseView(BaseResponseMixin, APIView):
 
             if verse:
                 serializer = JourneyVerseSerializer(verse)
-                return self.success_response(data=serializer.data)
+                return self.success_response({
+                'message': 'Daily verse refreshed successfully',
+                'data': serializer.data
+            })
             else:
                 return self.error_response(message="No verses found in database.")
 
