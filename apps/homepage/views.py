@@ -6,6 +6,7 @@ from apps.homepage.services.home_page_bible_api import DailyVerseService
 from .serializers import DailyVerseSerializer 
 from apps.core.utils.mixins import BaseResponseMixin
 from django.utils import timezone
+from datetime import timedelta
 
 class DailyVerseView(BaseResponseMixin, APIView):
     """
@@ -68,7 +69,9 @@ class JourneyDailyVerseView(BaseResponseMixin, APIView):
 
     def get(self, request):
         try:
-            join_date = request.user.date_joined.date()
+            user = request.user
+            
+            join_date = user.date_joined.date() if user.date_joined else timezone.now().date()
             today = timezone.now().date()
             days_passed = (today - join_date).days
             
@@ -77,15 +80,25 @@ class JourneyDailyVerseView(BaseResponseMixin, APIView):
             verse = JourneyVerse.objects.filter(day_number=target_day).first()
             
             if not verse:
-
                 verse = JourneyVerse.objects.filter(day_number=1).first()
 
             if verse:
-                serializer = JourneyVerseSerializer(verse)
-                return self.success_response({
-                'message': 'Daily verse refreshed successfully',
-                'data': serializer.data
-            })
+                response_payload = {
+                    "message": "Daily verse refreshed successfully",
+                    "data": {
+                        "id": verse.id,
+                        "day_number": verse.day_number,
+                        "title": verse.title, 
+                        "verse_id": f"JOURNEY.{verse.day_number}",
+                        "verse_text": verse.verse_text,
+                        "verse_reference": verse.verse_reference,
+                        "bible_version_title": "Preachly Journey Version",
+                        "date_assigned": timezone.now().isoformat(),
+                        "expires_at": (timezone.now() + timedelta(days=1)).isoformat(),
+                        "is_expired": False
+                    }
+                }
+                return self.success_response(data=response_payload)
             else:
                 return self.error_response(message="No verses found in database.")
 
