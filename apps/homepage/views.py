@@ -91,7 +91,7 @@ class JourneyDailyVerseView(BaseResponseMixin, APIView):
                         "title": verse.title, 
                         "verse_id": f"JOURNEY.{verse.day_number}",
                         "verse_text": verse.verse_text,
-                        "verse_reference": verse.verse_reference,
+                        "verse_reference": verse.title,
                         "bible_version_title": "Preachly Journey Version",
                         "date_assigned": timezone.now().isoformat(),
                         "expires_at": (timezone.now() + timedelta(days=1)).isoformat(),
