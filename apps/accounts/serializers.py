@@ -500,9 +500,14 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        request = self.context.get("request")
-        if instance.profile_picture and request:
-            data["profile_picture"] = request.build_absolute_uri(instance.profile_picture.url)
+        profile_picture = data.get('profile_picture')
+        if profile_picture:
+            request = self.context.get('request')
+            path = f"/media/{profile_picture.lstrip('/')}"
+            if request:
+                data['profile_picture'] = request.build_absolute_uri(path)
+            else:
+                data['profile_picture'] = path
         return data
 
 class VerifyEmailChangeSerializer(serializers.Serializer):
