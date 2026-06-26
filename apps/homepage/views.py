@@ -77,7 +77,7 @@ class JourneyDailyVerseView(BaseResponseMixin, APIView):
             
             target_day = (days_passed % 90) + 1 
             
-            verse = JourneyVerse.objects.filter(day_number=target_day).first()
+            verse = JourneyVerse.objects.filter(day_number__gte=target_day).order_by('day_number').first()
             
             if not verse:
                 verse = JourneyVerse.objects.filter(day_number=1).first()
