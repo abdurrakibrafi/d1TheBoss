@@ -43,7 +43,8 @@ def create_weekly_checkins_for_all_users():
                 last_week_checkin.save()
                 missed_count += 1
                 _reset_weekly_streak(user)
-            existing_weeks = UserWeeklyCheckin.objects.filter(user=user).count()
+            existing_weeks = UserWeeklyCheckin.objects.filter(
+                user=user).count()
             next_week_num = existing_weeks + 1
 
             checkin, created = UserWeeklyCheckin.objects.get_or_create(
@@ -62,10 +63,12 @@ def create_weekly_checkins_for_all_users():
                 created_count += 1
 
         except Exception as e:
-            logger.error(f"Error creating weekly checkin for user {user.id}: {str(e)}")
+            logger.error(
+                f"Error creating weekly checkin for user {user.id}: {str(e)}")
             continue
 
-    logger.info(f"Weekly checkin task: {created_count} created, {missed_count} marked missed")
+    logger.info(
+        f"Weekly checkin task: {created_count} created, {missed_count} marked missed")
     return f"Created: {created_count}, Missed: {missed_count}"
 
 
@@ -78,7 +81,8 @@ def _reset_weekly_streak(user):
         streak.has_red_flame = False
         streak.save()
     except Exception as e:
-        logger.error(f"Error resetting weekly streak for user {user.id}: {str(e)}")
+        logger.error(
+            f"Error resetting weekly streak for user {user.id}: {str(e)}")
 
 
 def _update_weekly_streak(user):
@@ -96,26 +100,52 @@ def _update_weekly_streak(user):
         streak.save()
         return streak
     except Exception as e:
-        logger.error(f"Error updating weekly streak for user {user.id}: {str(e)}")
+        logger.error(
+            f"Error updating weekly streak for user {user.id}: {str(e)}")
         return None
+
+
+# @shared_task(name='checkin.close_week_on_saturday')
+# def close_week_on_saturday():
+#     """Every Sunday 00:00 UTC — mark last week missed."""
+#     from apps.checkin.models import UserWeeklyCheckin
+
+#     today = timezone.now().date()
+#     last_week_end = today - timedelta(days=1)
+#     last_week_start = last_week_end - timedelta(days=6)
+
+#     missed = UserWeeklyCheckin.objects.filter(
+#         week_start=last_week_start,
+#         status='available'
+#     ).update(status='missed', is_available=False)
+
+#     logger.info(f"Closed {missed} weekly checkins as missed")
+#     return f"Marked {missed} as missed"
 
 
 @shared_task(name='checkin.close_week_on_saturday')
 def close_week_on_saturday():
-    """Every Sunday 00:00 UTC — mark last week missed."""
     from apps.checkin.models import UserWeeklyCheckin
 
     today = timezone.now().date()
     last_week_end = today - timedelta(days=1)
     last_week_start = last_week_end - timedelta(days=6)
 
-    missed = UserWeeklyCheckin.objects.filter(
+    missed_checkins = UserWeeklyCheckin.objects.filter(
         week_start=last_week_start,
         status='available'
-    ).update(status='missed', is_available=False)
+    ).select_related('user')
 
-    logger.info(f"Closed {missed} weekly checkins as missed")
-    return f"Marked {missed} as missed"
+    missed_count = 0
+    for checkin in missed_checkins:
+        checkin.status = 'missed'
+        checkin.is_available = False
+        checkin.save()
+        _reset_weekly_streak(checkin.user)  # ✅
+        missed_count += 1
+
+    logger.info(f"Closed {missed_count} weekly checkins as missed")
+    return f"Marked {missed_count} as missed"
 
 
 @shared_task(name='checkin.check_and_award_badges')
@@ -140,7 +170,8 @@ def check_and_award_badges_task(user_id):
         status='completed'
     ).count()
 
-    logger.info(f"Badge check for user {user.id}: {total_completed} completed weeks")
+    logger.info(
+        f"Badge check for user {user.id}: {total_completed} completed weeks")
     milestone_to_badge_type = {
         1:  'week_1',   # Seed Planted
         2:  'week_2',   # Rooted in Grace
@@ -173,9 +204,11 @@ def check_and_award_badges_task(user_id):
                         'image': template.image.url if template.image else None,
                         'weeks_required': template.weeks_required,
                     })
-                    logger.info(f"Awarded badge '{badge_type}' to user {user.id}")
+                    logger.info(
+                        f"Awarded badge '{badge_type}' to user {user.id}")
             except BadgeTemplate.DoesNotExist:
-                logger.warning(f"BadgeTemplate '{badge_type}' not found — run /badges/populate/ first")
+                logger.warning(
+                    f"BadgeTemplate '{badge_type}' not found — run /badges/populate/ first")
                 continue
 
     return newly_awarded  # Return list so WeeklyCheckinSubmitAPIView can use it
@@ -208,7 +241,8 @@ def create_week1_for_new_user(user_id):
         }
     )
 
-    logger.info(f"Week 1 {'created' if created else 'already exists'} for user {user.id}")
+    logger.info(
+        f"Week 1 {'created' if created else 'already exists'} for user {user.id}")
     return f"Week 1 {'created' if created else 'already exists'}"
 
 
@@ -224,7 +258,7 @@ def send_weekly_checkin_reminder():
 
     User = get_user_model()
     week_start, week_end = get_current_week_boundaries()
-    
+
     today = timezone.now()
     day_of_week = today.weekday()  # Mon=0, Sun=6
     if day_of_week == 6:  # Sunday
@@ -260,7 +294,8 @@ def send_weekly_checkin_reminder():
             sent_count += 1
             logger.info(f"✅ Weekly reminder sent to user {checkin.user.id}")
         except Exception as e:
-            logger.error(f"❌ Failed to send reminder to user {checkin.user.id}: {str(e)}")
+            logger.error(
+                f"❌ Failed to send reminder to user {checkin.user.id}: {str(e)}")
             continue
 
     logger.info(f"Weekly reminder task complete — sent to {sent_count} users")
