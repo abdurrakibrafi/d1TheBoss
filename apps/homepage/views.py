@@ -59,48 +59,45 @@ class RefreshDailyVerseView(BaseResponseMixin, APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 
-
-from datetime import timezone as dt_timezone
-from .models import JourneyVerse
-from .serializers import JourneyVerseSerializer
-
+from django.utils import timezone
+from datetime import timedelta
+from .models import JourneyVerse, UserJourneyProgress
+from apps.core.utils.mixins import BaseResponseMixin
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 class JourneyDailyVerseView(BaseResponseMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         try:
-            user = request.user
-            
-            join_date = user.date_joined.date() if user.date_joined else timezone.now().date()
+            from datetime import date
+            epoch = date(2026, 6, 20)  
             today = timezone.now().date()
-            days_passed = (today - join_date).days
-            
-            target_day = (days_passed % 90) + 1 
-            
-            verse = JourneyVerse.objects.filter(day_number__gte=target_day).order_by('day_number').first()
-            
-            if not verse:
-                verse = JourneyVerse.objects.filter(day_number=1).first()
+            days_passed = (today - epoch).days
 
-            if verse:
-                response_payload = {
-                    "message": "Daily verse refreshed successfully",
-                    "data": {
-                        "id": verse.id,
-                        "day_number": verse.day_number,
-                        "title": verse.title, 
-                        "verse_id": f"JOURNEY.{verse.day_number}",
-                        "verse_text": verse.verse_text,
-                        "verse_reference": verse.title,
-                        "bible_version_title": "Preachly Journey Version",
-                        "date_assigned": timezone.now().isoformat(),
-                        "expires_at": (timezone.now() + timedelta(days=1)).isoformat(),
-                        "is_expired": False
-                    }
-                }
-                return self.success_response(data=response_payload)
-            else:
+            verses = list(JourneyVerse.objects.order_by('day_number'))
+            if not verses:
                 return self.error_response(message="No verses found in database.")
+
+            index = days_passed % len(verses)
+            verse = verses[index]
+
+            response_payload = {
+                "message": "Daily verse refreshed successfully",
+                "data": {
+                    "id": verse.id,
+                    "day_number": verse.day_number,
+                    "title": verse.title,
+                    "verse_id": f"JOURNEY.{verse.day_number}",
+                    "verse_text": verse.verse_text,
+                    "verse_reference": verse.title,
+                    "bible_version_title": "Preachly Journey Version",
+                    "date_assigned": timezone.now().isoformat(),
+                    "expires_at": (timezone.now() + timedelta(days=1)).isoformat(),
+                    "is_expired": False
+                }
+            }
+            return self.success_response(data=response_payload)
 
         except Exception as e:
             return self.handle_exception(e)
