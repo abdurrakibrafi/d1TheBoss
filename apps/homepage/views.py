@@ -61,7 +61,7 @@ class RefreshDailyVerseView(BaseResponseMixin, APIView):
 
 from django.utils import timezone
 from datetime import timedelta
-from .models import JourneyVerse, UserJourneyProgress
+from .models import JourneyVerse
 from apps.core.utils.mixins import BaseResponseMixin
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
