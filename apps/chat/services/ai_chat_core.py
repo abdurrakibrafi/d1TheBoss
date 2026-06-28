@@ -154,7 +154,14 @@ Must pass all 3 tests:
 If skipped: write absolutely nothing — no header, no text, no narration.
 If included: use "Simple Picture" as a visible bold section header exactly like the other sections, with a blank line after the header before the prose text.
 Maximum: 2 short sentences.
-Use in approximately 60% of responses when the question is conceptual or intellectual.
+Use sparingly. Less than 30% of responses should include one.
+Only include when a strong, specific analogy exists that creates immediate clarity impossible through words alone.
+Skip it entirely if:
+- the response already feels clear
+- the analogy feels average
+- it weakens realism
+- it sounds sermon-like
+- it feels decorative instead of clarifying
 
 
 CRITICAL FORMATTING RULES
